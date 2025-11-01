@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics - AI Email Assistant</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .navbar {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .navbar h1 {
+            font-size: 1.5rem;
+            color: #667eea;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+        }
+
+        .nav-links a {
+            color: #555;
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+
+        .nav-links a:hover {
+            color: #667eea;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+
+        .page-header {
+            color: white;
+            margin-bottom: 2rem;
+        }
+
+        .page-header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .page-header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            transition: transform 0.3s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .stat-card .icon {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .stat-card h3 {
+            font-size: 2.5rem;
+            color: #667eea;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-card p {
+            color: #666;
+            font-size: 1rem;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .chart-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .chart-card h2 {
+            color: #333;
+            margin-bottom: 1.5rem;
+            font-size: 1.3rem;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+        }
+
+        .recent-emails {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .recent-emails h2 {
+            color: #333;
+            margin-bottom: 1.5rem;
+            font-size: 1.3rem;
+        }
+
+        .email-row {
+            padding: 1rem;
+            border-bottom: 1px solid #f0f0f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.2s;
+        }
+
+        .email-row:hover {
+            background: #f8f9ff;
+        }
+
+        .email-row:last-child {
+            border-bottom: none;
+        }
+
+        .email-info {
+            flex: 1;
+        }
+
+        .email-subject {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 0.3rem;
+        }
+
+        .email-sender {
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .email-badges {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .badge {
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .badge-HIGH {
+            background: #ffe0e0;
+            color: #d32f2f;
+        }
+
+        .badge-MEDIUM {
+            background: #fff3e0;
+            color: #f57c00;
+        }
+
+        .badge-LOW {
+            background: #e8f5e9;
+            color: #388e3c;
+        }
+
+        .badge-positive {
+            background: #e8f5e9;
+            color: #388e3c;
+        }
+
+        .badge-negative {
+            background: #ffe0e0;
+            color: #d32f2f;
+        }
+
+        .badge-neutral {
+            background: #f0f0f0;
+            color: #666;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: #999;
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar">
+        <h1>🤖 AI Email Assistant</h1>
+        <div class="nav-links">
+            <a href="{{ url_for('inbox') }}">📧 Inbox</a>
+            <a href="{{ url_for('analytics') }}">📊 Analytics</a>
+            <a href="{{ url_for('logout') }}">🚪 Logout</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="page-header">
+            <h1>📊 Analytics Dashboard</h1>
+            <p>Insights and statistics from your email analysis</p>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="icon">📧</div>
+                <h3>{{ analytics.total_emails }}</h3>
+                <p>Total Emails Analyzed</p>
+            </div>
+            <div class="stat-card">
+                <div class="icon">🔴</div>
+                <h3>{{ analytics.priority_distribution.HIGH or 0 }}</h3>
+                <p>High Priority</p>
+            </div>
+            <div class="stat-card">
+                <div class="icon">😊</div>
+                <h3>{{ analytics.sentiment_distribution.positive or 0 }}</h3>
+                <p>Positive Sentiment</p>
+            </div>
+            <div class="stat-card">
+                <div class="icon">📁</div>
+                <h3>{{ analytics.category_distribution|length }}</h3>
+                <p>Categories</p>
+            </div>
+        </div>
+
+        {% if analytics.total_emails > 0 %}
+        <div class="charts-grid">
+            <div class="chart-card">
+                <h2>Priority Distribution</h2>
+                <div class="chart-container">
+                    <canvas id="priorityChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-card">
+                <h2>Sentiment Analysis</h2>
+                <div class="chart-container">
+                    <canvas id="sentimentChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-card" style="grid-column: 1 / -1;">
+                <h2>Category Breakdown</h2>
+                <div class="chart-container">
+                    <canvas id="categoryChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="recent-emails">
+            <h2>Recently Analyzed Emails</h2>
+            {% if analytics.recent_emails %}
+            {% for email in analytics.recent_emails %}
+            <div class="email-row">
+                <div class="email-info">
+                    <div class="email-subject">{{ email.subject or 'No Subject' }}</div>
+                    <div class="email-sender">{{ email.sender }}</div>
+                </div>
+                <div class="email-badges">
+                    <span class="badge badge-{{ email.priority }}">{{ email.priority }}</span>
+                    <span class="badge badge-{{ email.sentiment }}">{{ email.sentiment }}</span>
+                </div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="empty-state">No emails analyzed yet</div>
+            {% endif %}
+        </div>
+        {% else %}
+        <div class="chart-card">
+            <div class="empty-state">
+                <h3>No data available yet</h3>
+                <p>Analyze some emails from your inbox to see statistics here</p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <script>
+        const analytics = {{ analytics| tojson | safe }};
+
+        // Priority Chart
+        if (analytics && analytics.total_emails > 0) {
+            new Chart(document.getElementById('priorityChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['High', 'Medium', 'Low'],
+                    datasets: [{
+                        data: [
+                            analytics.priority_distribution.HIGH || 0,
+                            analytics.priority_distribution.MEDIUM || 0,
+                            analytics.priority_distribution.LOW || 0
+                        ],
+                        backgroundColor: ['#d32f2f', '#f57c00', '#388e3c'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+
+            // Sentiment Chart
+            new Chart(document.getElementById('sentimentChart'), {
+                type: 'pie',
+                data: {
+                    labels: ['Positive', 'Negative', 'Neutral'],
+                    datasets: [{
+                        data: [
+                            analytics.sentiment_distribution.positive || 0,
+                            analytics.sentiment_distribution.negative || 0,
+                            analytics.sentiment_distribution.neutral || 0
+                        ],
+                        backgroundColor: ['#388e3c', '#d32f2f', '#999'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+
+            // Category Chart
+            const categories = Object.keys(analytics.category_distribution);
+            const categoryCounts = Object.values(analytics.category_distribution);
+
+            new Chart(document.getElementById('categoryChart'), {
+                type: 'bar',
+                data: {
+                    labels: categories,
+                    datasets: [{
+                        label: 'Number of Emails',
+                        data: categoryCounts,
+                        backgroundColor: '#667eea',
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ subject }} - AI Email Assistant</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+    }
+    
+    .navbar {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      padding: 1rem 2rem;
+      box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .navbar h1 {
+      font-size: 1.5rem;
+      color: #667eea;
+    }
+    
+    .nav-links {
+      display: flex;
+      gap: 1.5rem;
+      align-items: center;
+    }
+    
+    .nav-links a {
+      color: #555;
+      text-decoration: none;
+      font-weight: 500;
+      transition: color 0.3s;
+    }
+    
+    .nav-links a:hover {
+      color: #667eea;
+    }
+    
+    .container {
+      max-width: 1000px;
+      margin: 2rem auto;
+      padding: 0 2rem;
+    }
+    
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 2rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    }
+    
+    .header-section {
+      border-bottom: 2px solid #f0f0f0;
+      padding-bottom: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    
+    .subject {
+      font-size: 1.8rem;
+      color: #333;
+      margin-bottom: 1rem;
+      line-height: 1.3;
+    }
+    
+    .meta {
+      display: flex;
+      gap: 2rem;
+      flex-wrap: wrap;
+      color: #666;
+      font-size: 0.95rem;
+    }
+    
+    .meta-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    
+    .badges {
+      display: flex;
+      gap: 0.8rem;
+      margin-top: 1rem;
+      flex-wrap: wrap;
+    }
+    
+    .badge {
+      padding: 0.5rem 1rem;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    
+    .badge-priority-HIGH {
+      background: #ffe0e0;
+      color: #d32f2f;
+    }
+    
+    .badge-priority-MEDIUM {
+      background: #fff3e0;
+      color: #f57c00;
+    }
+    
+    .badge-priority-LOW {
+      background: #e8f5e9;
+      color: #388e3c;
+    }
+    
+    .badge-sentiment-positive {
+      background: #e8f5e9;
+      color: #388e3c;
+    }
+    
+    .badge-sentiment-negative {
+      background: #ffe0e0;
+      color: #d32f2f;
+    }
+    
+    .badge-sentiment-neutral {
+      background: #f0f0f0;
+      color: #666;
+    }
+    
+    .badge-category {
+      background: #e3f2fd;
+      color: #1976d2;
+    }
+    
+    .section-title {
+      font-size: 1.2rem;
+      color: #667eea;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    
+    .summary-box {
+      background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+      padding: 1.5rem;
+      border-radius: 8px;
+      border-left: 4px solid #667eea;
+      white-space: pre-wrap;
+      line-height: 1.6;
+    }
+    
+    .body-box {
+      background: #fafafa;
+      padding: 1.5rem;
+      border-radius: 8px;
+      white-space: pre-wrap;
+      line-height: 1.6;
+      max-height: 500px;
+      overflow-y: auto;
+    }
+    
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1rem;
+    }
+    
+    .info-item {
+      background: #f8f9ff;
+      padding: 1rem;
+      border-radius: 8px;
+    }
+    
+    .info-item strong {
+      display: block;
+      color: #667eea;
+      margin-bottom: 0.5rem;
+      font-size: 0.9rem;
+    }
+    
+    .info-item ul {
+      margin-left: 1.2rem;
+      color: #555;
+    }
+    
+    .reply-section {
+      background: linear-gradient(135deg, #f8f9ff 0%, #fff 100%);
+    }
+    
+    .form-group {
+      margin-bottom: 1.5rem;
+    }
+    
+    label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-weight: 600;
+      color: #555;
+    }
+    
+    select, textarea {
+      width: 100%;
+      padding: 0.8rem;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 0.95rem;
+      transition: border-color 0.3s;
+    }
+    
+    select:focus, textarea:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+    
+    textarea {
+      resize: vertical;
+      min-height: 120px;
+    }
+    
+    .btn {
+      padding: 0.8rem 1.5rem;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 1rem;
+      font-weight: 600;
+      transition: all 0.3s;
+    }
+    
+    .btn-primary {
+      background: #667eea;
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      background: #5568d3;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+    
+    .btn-primary:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+      transform: none;
+    }
+    
+    .loading {
+      display: none;
+      color: #667eea;
+      margin-top: 1rem;
+      font-weight: 500;
+    }
+    
+    .loading.show {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <h1>🤖 AI Email Assistant</h1>
+    <div class="nav-links">
+      <a href="{{ url_for('inbox') }}">← Back to Inbox</a>
+      <a href="{{ url_for('analytics') }}">📊 Analytics</a>
+      <a href="{{ url_for('logout') }}">🚪 Logout</a>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="card">
+      <div class="header-section">
+        <h1 class="subject">{{ subject or 'No Subject' }}</h1>
+        <div class="meta">
+          <div class="meta-item">
+            <strong>From:</strong> {{ headers.From if headers else sender }}
+          </div>
+          <div class="meta-item">
+            <strong>Date:</strong> {{ headers.Date if headers else date }}
+          </div>
+        </div>
+        <div class="badges">
+          {% if priority %}
+          <span class="badge badge-priority-{{ priority }}">
+            {% if priority == 'HIGH' %}🔴{% elif priority == 'MEDIUM' %}🟡{% else %}🟢{% endif %}
+            {{ priority }} Priority
+          </span>
+          {% endif %}
+          {% if sentiment %}
+          <span class="badge badge-sentiment-{{ sentiment }}">
+            {% if sentiment == 'positive' %}😊{% elif sentiment == 'negative' %}😟{% else %}😐{% endif %}
+            {{ sentiment|title }} ({{ (sentiment_score * 100)|int }}%)
+          </span>
+          {% endif %}
+          {% if category %}
+          <span class="badge badge-category">
+            📁 {{ category }}
+          </span>
+          {% endif %}
+        </div>
+      </div>
+
+      {% if summary %}
+      <div style="margin-bottom: 2rem;">
+        <h2 class="section-title">📝 AI Summary</h2>
+        <div class="summary-box">{{ summary }}</div>
+      </div>
+      {% endif %}
+
+      {% if extracted_info and (extracted_info.action_items or extracted_info.dates or extracted_info.emails or extracted_info.phones) %}
+      <div style="margin-bottom: 2rem;">
+        <h2 class="section-title">🔍 Extracted Information</h2>
+        <div class="info-grid">
+          {% if extracted_info.action_items %}
+          <div class="info-item">
+            <strong>Action Items</strong>
+            <ul>
+              {% for item in extracted_info.action_items %}
+              <li>{{ item }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% endif %}
+          {% if extracted_info.dates %}
+          <div class="info-item">
+            <strong>Important Dates</strong>
+            <ul>
+              {% for date in extracted_info.dates %}
+              <li>{{ date }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% endif %}
+          {% if extracted_info.emails %}
+          <div class="info-item">
+            <strong>Email Addresses</strong>
+            <ul>
+              {% for email in extracted_info.emails %}
+              <li>{{ email }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% endif %}
+          {% if extracted_info.phones %}
+          <div class="info-item">
+            <strong>Phone Numbers</strong>
+            <ul>
+              {% for phone in extracted_info.phones %}
+              <li>{{ phone }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+
+      <div style="margin-bottom: 2rem;">
+        <h2 class="section-title">📧 Email Body</h2>
+        <div class="body-box">{{ body or snippet }}</div>
+      </div>
+    </div>
+
+    <div class="card reply-section">
+      <h2 class="section-title">✍️ Generate Reply</h2>
+      
+      <div class="form-group">
+        <label for="tone">Tone</label>
+        <select id="tone">
+          <option value="professional">Professional</option>
+          <option value="friendly">Friendly</option>
+          <option value="concise">Concise</option>
+          <option value="formal">Formal</option>
+          <option value="empathetic">Empathetic</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="instructions">Additional Instructions (optional)</label>
+        <textarea id="instructions" placeholder="e.g., Mention that I'll follow up next week, include pricing details, etc."></textarea>
+      </div>
+
+      <button class="btn btn-primary" id="generateBtn" onclick="generateReply()">
+        Generate Reply
+      </button>
+      <div class="loading" id="loading">⏳ Generating your reply...</div>
+
+      <div class="form-group" style="margin-top: 1.5rem;">
+        <label for="draft">Draft Reply</label>
+        <textarea id="draft" rows="10" placeholder="Your AI-generated reply will appear here..."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    async function generateReply() {
+      const tone = document.getElementById('tone').value;
+      const instructions = document.getElementById('instructions').value;
+      const btn = document.getElementById('generateBtn');
+      const loading = document.getElementById('loading');
+      const draft = document.getElementById('draft');
+
+      btn.disabled = true;
+      loading.classList.add('show');
+      draft.value = '';
+
+      try {
+        const response = await fetch('/generate_reply/{{ id }}', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            tone: tone,
+            instructions: instructions
+          })
+        });
+
+        const data = await response.json();
+        
+        if (data.error) {
+          draft.value = 'Error: ' + data.error;
+        } else {
+          draft.value = data.reply;
+        }
+      } catch (error) {
+        draft.value = 'Error generating reply: ' + error.message;
+      } finally {
+        btn.disabled = false;
+        loading.classList.remove('show');
+      }
+    }
+  </script>
+</body>
+</html>

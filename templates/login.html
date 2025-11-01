@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - AI Email Assistant</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+    .login-container {
+      background: white;
+      padding: 40px;
+      border-radius: 10px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+      text-align: center;
+      max-width: 400px;
+    }
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+    }
+    p {
+      color: #666;
+      margin-bottom: 30px;
+    }
+    .btn-login {
+      background-color: #4285f4;
+      color: white;
+      padding: 12px 30px;
+      border: none;
+      border-radius: 5px;
+      font-size: 16px;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+      transition: background-color 0.3s;
+    }
+    .btn-login:hover {
+      background-color: #357ae8;
+    }
+    .features {
+      margin-top: 30px;
+      text-align: left;
+      color: #555;
+      font-size: 14px;
+    }
+    .features li {
+      margin: 8px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-container">
+    <h1>🤖 AI Email Assistant</h1>
+    <p>Manage your Gmail inbox with AI-powered insights</p>
+    
+    <a href="{{ url_for('login') }}" class="btn-login">
+      Sign in with Google
+    </a>
+    
+    <div class="features">
+      <strong>Features:</strong>
+      <ul>
+        <li>📧 View your inbox</li>
+        <li>🎯 AI priority classification</li>
+        <li>📝 Smart email summaries</li>
+        <li>✍️ Auto-generate replies</li>
+      </ul>
+    </div>
+  </div>
+</body>
+</html>
