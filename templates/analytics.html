@@ -14,24 +14,25 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f5f5f5;
             min-height: 100vh;
         }
 
         .navbar {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
+            background: #ffffff;
+            border-bottom: 1px solid #e5e5e5;
             padding: 1rem 2rem;
-            box-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
 
         .navbar h1 {
-            font-size: 1.5rem;
-            color: #667eea;
+            font-size: 1.25rem;
+            color: #1a1a1a;
+            font-weight: 600;
+            letter-spacing: -0.5px;
         }
 
         .nav-links {
@@ -48,7 +49,7 @@
         }
 
         .nav-links a:hover {
-            color: #667eea;
+            color: #1a1a1a;
         }
 
         .container {
@@ -58,18 +59,19 @@
         }
 
         .page-header {
-            color: white;
+            color: #1a1a1a;
             margin-bottom: 2rem;
         }
 
         .page-header h1 {
-            font-size: 2.5rem;
+            font-size: 2rem;
             margin-bottom: 0.5rem;
+            font-weight: 600;
         }
 
         .page-header p {
-            font-size: 1.1rem;
-            opacity: 0.9;
+            font-size: 1rem;
+            color: #666;
         }
 
         .stats-grid {
@@ -82,25 +84,27 @@
         .stat-card {
             background: white;
             padding: 2rem;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e5e5e5;
+            border-radius: 8px;
             text-align: center;
-            transition: transform 0.3s;
+            transition: transform 0.2s;
         }
 
         .stat-card:hover {
-            transform: translateY(-5px);
+            transform: translateY(-2px);
         }
 
         .stat-card .icon {
-            font-size: 2.5rem;
+            font-size: 2rem;
             margin-bottom: 1rem;
+            opacity: 0.6;
         }
 
         .stat-card h3 {
             font-size: 2.5rem;
-            color: #667eea;
+            color: #1a1a1a;
             margin-bottom: 0.5rem;
+            font-weight: 600;
         }
 
         .stat-card p {
@@ -118,14 +122,17 @@
         .chart-card {
             background: white;
             padding: 2rem;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e5e5e5;
+            border-radius: 8px;
         }
 
         .chart-card h2 {
-            color: #333;
+            color: #1a1a1a;
             margin-bottom: 1.5rem;
-            font-size: 1.3rem;
+            font-size: 1rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
         .chart-container {
@@ -136,14 +143,17 @@
         .recent-emails {
             background: white;
             padding: 2rem;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e5e5e5;
+            border-radius: 8px;
         }
 
         .recent-emails h2 {
-            color: #333;
+            color: #1a1a1a;
             margin-bottom: 1.5rem;
-            font-size: 1.3rem;
+            font-size: 1rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
         .email-row {
@@ -231,38 +241,38 @@
 
 <body>
     <nav class="navbar">
-        <h1>🤖 AI Email Assistant</h1>
+        <h1>AI Email Assistant</h1>
         <div class="nav-links">
-            <a href="{{ url_for('inbox') }}">📧 Inbox</a>
-            <a href="{{ url_for('analytics') }}">📊 Analytics</a>
-            <a href="{{ url_for('logout') }}">🚪 Logout</a>
+            <a href="{{ url_for('inbox') }}">Inbox</a>
+            <a href="{{ url_for('analytics') }}">Analytics</a>
+            <a href="{{ url_for('logout') }}">Logout</a>
         </div>
     </nav>
 
     <div class="container">
         <div class="page-header">
-            <h1>📊 Analytics Dashboard</h1>
+            <h1>Analytics Dashboard</h1>
             <p>Insights and statistics from your email analysis</p>
         </div>
 
         <div class="stats-grid">
             <div class="stat-card">
-                <div class="icon">📧</div>
+                <div class="icon">—</div>
                 <h3>{{ analytics.total_emails }}</h3>
                 <p>Total Emails Analyzed</p>
             </div>
             <div class="stat-card">
-                <div class="icon">🔴</div>
+                <div class="icon">—</div>
                 <h3>{{ analytics.priority_distribution.HIGH or 0 }}</h3>
                 <p>High Priority</p>
             </div>
             <div class="stat-card">
-                <div class="icon">😊</div>
+                <div class="icon">—</div>
                 <h3>{{ analytics.sentiment_distribution.positive or 0 }}</h3>
                 <p>Positive Sentiment</p>
             </div>
             <div class="stat-card">
-                <div class="icon">📁</div>
+                <div class="icon">—</div>
                 <h3>{{ analytics.category_distribution|length }}</h3>
                 <p>Categories</p>
             </div>
@@ -336,7 +346,7 @@
                             analytics.priority_distribution.MEDIUM || 0,
                             analytics.priority_distribution.LOW || 0
                         ],
-                        backgroundColor: ['#d32f2f', '#f57c00', '#388e3c'],
+                        backgroundColor: ['#c33', '#f57c00', '#388e3c'],
                         borderWidth: 0
                     }]
                 },
@@ -362,7 +372,7 @@
                             analytics.sentiment_distribution.negative || 0,
                             analytics.sentiment_distribution.neutral || 0
                         ],
-                        backgroundColor: ['#388e3c', '#d32f2f', '#999'],
+                        backgroundColor: ['#388e3c', '#c33', '#999'],
                         borderWidth: 0
                     }]
                 },
@@ -388,7 +398,7 @@
                     datasets: [{
                         label: 'Number of Emails',
                         data: categoryCounts,
-                        backgroundColor: '#667eea',
+                        backgroundColor: '#1a1a1a',
                         borderRadius: 8
                     }]
                 },

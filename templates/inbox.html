@@ -13,24 +13,25 @@
     }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: #f5f5f5;
       min-height: 100vh;
     }
 
     .navbar {
-      background: rgba(255, 255, 255, 0.95);
-      backdrop-filter: blur(10px);
+      background: #ffffff;
+      border-bottom: 1px solid #e5e5e5;
       padding: 1rem 2rem;
-      box-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
 
     .navbar h1 {
-      font-size: 1.5rem;
-      color: #667eea;
+      font-size: 1.25rem;
+      color: #1a1a1a;
+      font-weight: 600;
+      letter-spacing: -0.5px;
       display: flex;
       align-items: center;
       gap: 0.5rem;
@@ -43,14 +44,15 @@
     }
 
     .nav-links a {
-      color: #555;
+      color: #666;
       text-decoration: none;
       font-weight: 500;
-      transition: color 0.3s;
+      font-size: 0.9rem;
+      transition: color 0.2s;
     }
 
     .nav-links a:hover {
-      color: #667eea;
+      color: #1a1a1a;
     }
 
     .container {
@@ -69,15 +71,16 @@
     .stat-card {
       background: white;
       padding: 1.5rem;
-      border-radius: 12px;
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+      border: 1px solid #e5e5e5;
+      border-radius: 8px;
       text-align: center;
     }
 
     .stat-card h3 {
       font-size: 2rem;
-      color: #667eea;
+      color: #1a1a1a;
       margin-bottom: 0.5rem;
+      font-weight: 600;
     }
 
     .stat-card p {
@@ -88,13 +91,13 @@
     .controls {
       background: white;
       padding: 1rem;
-      border-radius: 12px;
+      border: 1px solid #e5e5e5;
+      border-radius: 8px;
       margin-bottom: 1rem;
       display: flex;
       gap: 1rem;
       flex-wrap: wrap;
       align-items: center;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
     }
 
     .btn {
@@ -108,23 +111,24 @@
     }
 
     .btn-primary {
-      background: #667eea;
+      background: #1a1a1a;
       color: white;
+      border: 1px solid #1a1a1a;
     }
 
     .btn-primary:hover {
-      background: #5568d3;
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+      background: #333;
+      transform: translateY(-1px);
     }
 
     .btn-secondary {
-      background: #f0f0f0;
-      color: #333;
+      background: white;
+      color: #1a1a1a;
+      border: 1px solid #e5e5e5;
     }
 
     .btn-secondary:hover {
-      background: #e0e0e0;
+      background: #fafafa;
     }
 
     select {
@@ -137,9 +141,9 @@
 
     .email-list {
       background: white;
-      border-radius: 12px;
+      border: 1px solid #e5e5e5;
+      border-radius: 8px;
       overflow: hidden;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
     }
 
     .email-item {
@@ -153,7 +157,7 @@
     }
 
     .email-item:hover {
-      background: #f8f9ff;
+      background: #fafafa;
     }
 
     .email-item:last-child {
@@ -278,11 +282,11 @@
 
 <body>
   <nav class="navbar">
-    <h1>🤖 AI Email Assistant</h1>
+    <h1>AI Email Assistant</h1>
     <div class="nav-links">
-      <a href="{{ url_for('inbox') }}">📧 Inbox</a>
-      <a href="{{ url_for('analytics') }}">📊 Analytics</a>
-      <a href="{{ url_for('logout') }}">🚪 Logout</a>
+      <a href="{{ url_for('inbox') }}">Inbox</a>
+      <a href="{{ url_for('analytics') }}">Analytics</a>
+      <a href="{{ url_for('logout') }}">Logout</a>
     </div>
   </nav>
 
@@ -310,16 +314,16 @@
 
     {% if messages %}
     <div class="controls">
-      <button class="btn btn-primary" onclick="analyzeSelected()">🔍 Analyze Selected</button>
-      <button class="btn btn-secondary" onclick="selectAll()">☑️ Select All</button>
-      <button class="btn btn-secondary" onclick="clearSelection()">⬜ Clear</button>
+      <button class="btn btn-primary" onclick="analyzeSelected()">Analyze Selected</button>
+      <button class="btn btn-secondary" onclick="selectAll()">Select All</button>
+      <button class="btn btn-secondary" onclick="clearSelection()">Clear</button>
       <select id="filterCategory" onchange="filterByCategory()">
         <option value="">All Categories</option>
-        <option value="Urgent Support">🔴 Urgent Support</option>
-        <option value="Work/Business">💼 Work/Business</option>
-        <option value="Personal">👤 Personal</option>
-        <option value="Newsletter">📧 Newsletter</option>
-        <option value="Spam/Promotional">⚠️ Spam</option>
+        <option value="Urgent Support">Urgent Support</option>
+        <option value="Work/Business">Work/Business</option>
+        <option value="Personal">Personal</option>
+        <option value="Newsletter">Newsletter</option>
+        <option value="Spam/Promotional">Spam/Promotional</option>
       </select>
       <select id="sortOrder" onchange="sortEmails()">
         <option value="date_desc">Newest First</option>
@@ -386,7 +390,7 @@
       }
 
       const panel = document.getElementById('detail-panel');
-      panel.innerHTML = '<div style="text-align: center; padding: 2rem;">⏳ Analyzing emails...</div>';
+      panel.innerHTML = '<div style="text-align: center; padding: 2rem; color: #666;">Analyzing emails...</div>';
       panel.classList.add('show');
 
       try {
@@ -394,20 +398,20 @@
           fetch(`/api/message/${id}`).then(r => r.json())
         ));
 
-        let html = '<h2 style="margin-bottom: 1.5rem;">📊 Analysis Results</h2>';
+        let html = '<h2 style="margin-bottom: 1.5rem; color: #1a1a1a; font-weight: 600;">Analysis Results</h2>';
         results.forEach(data => {
           const priorityLower = data.priority ? data.priority.toLowerCase() : 'medium';
           const sentimentColor = data.sentiment === 'positive' ? '#388e3c' : data.sentiment === 'negative' ? '#d32f2f' : '#666';
           const sentimentScore = data.sentiment_score ? (data.sentiment_score * 100).toFixed(0) : '50';
 
           html += '<div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem;">';
-          html += '<h3 style="color: #667eea; margin-bottom: 1rem;">' + (data.subject || 'No Subject') + '</h3>';
+          html += '<h3 style="color: #1a1a1a; margin-bottom: 1rem; font-weight: 600;">' + (data.subject || 'No Subject') + '</h3>';
           html += '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1rem;">';
           html += '<div><strong>Priority:</strong> <span class="badge badge-' + priorityLower + '">' + data.priority + '</span></div>';
           html += '<div><strong>Sentiment:</strong> <span style="color: ' + sentimentColor + ';">' + data.sentiment + ' (' + sentimentScore + '%)</span></div>';
           html += '<div><strong>Category:</strong> ' + data.category + '</div>';
           html += '</div>';
-          html += '<div style="background: #f8f9ff; padding: 1rem; border-radius: 6px; margin-bottom: 1rem;">';
+          html += '<div style="background: #fafafa; padding: 1rem; border-radius: 6px; border: 1px solid #e5e5e5; margin-bottom: 1rem;">';
           html += '<strong>Summary:</strong><br><div style="margin-top: 0.5rem; white-space: pre-wrap;">' + data.summary + '</div>';
           html += '</div>';
 
@@ -426,7 +430,7 @@
             html += '</div>';
           }
 
-          html += '<a href="/message/' + data.id + '" style="display: inline-block; margin-top: 1rem; color: #667eea; text-decoration: none; font-weight: 500;">View Full Details →</a>';
+          html += '<a href="/message/' + data.id + '" style="display: inline-block; margin-top: 1rem; color: #1a1a1a; text-decoration: none; font-weight: 600; border-bottom: 1px solid #1a1a1a;">View Full Details</a>';
           html += '</div>';
         });
 

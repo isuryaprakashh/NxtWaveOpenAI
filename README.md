@@ -29,7 +29,33 @@ A comprehensive AI-powered email management system that automates email analysis
 pip install -r requirements.txt
 ```
 
-### 2. Configure Environment Variables
+### 2. Install and Set Up Ollama
+
+1. **Download and Install Ollama**
+   - Visit [https://ollama.ai](https://ollama.ai) and download Ollama for your OS
+   - Install it following the instructions
+
+2. **Pull a ChatGPT-Equivalent Model**
+   ```bash
+   # Best models closest to ChatGPT (choose based on your hardware):
+   
+   # Recommended - Best Quality (closest to ChatGPT):
+   ollama pull llama3.1:8b          # Fast, good quality (4-8GB RAM) - RECOMMENDED
+   ollama pull llama3.1:70b         # Best quality, needs 40GB+ RAM
+   
+   # Alternative excellent models:
+   ollama pull qwen2.5:72b          # Very capable, GPT-4 level
+   ollama pull mixtral:8x7b         # Excellent reasoning, fast
+   ollama pull mistral              # Fast and efficient
+   ```
+   
+   **For most users**: Start with `llama3.1:8b` - it offers the best balance of quality and speed, very close to ChatGPT.
+
+3. **Start Ollama Service**
+   - Ollama runs automatically after installation
+   - Verify it's running: `ollama list` (should show your models)
+
+### 3. Configure Environment Variables
 Create a `.env` file:
 ```env
 # Flask
@@ -43,11 +69,13 @@ GOOGLE_OAUTH_REDIRECT_URI=http://localhost:5000/oauth2callback
 # Gmail API Scopes
 SCOPES=https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send
 
-# OpenAI
-OPENAI_API_KEY=your-openai-api-key
+# Ollama Configuration (Optional - defaults shown)
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llama3.1:8b            # ✅ FREE local model (default, no payment)
+# Note: The app uses FREE local models by default. Cloud models require payment.
 ```
 
-### 3. Set Up Google OAuth
+### 4. Set Up Google OAuth
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Create a new project
 3. Enable Gmail API
@@ -55,7 +83,7 @@ OPENAI_API_KEY=your-openai-api-key
 5. Add `http://localhost:5000/oauth2callback` as redirect URI
 6. Add your email as a test user
 
-### 4. Run the Application
+### 5. Run the Application
 ```bash
 python app.py
 ```
@@ -110,7 +138,7 @@ AI Email Assistant
 ## 🔧 Technical Stack
 
 - **Backend**: Python, Flask
-- **AI/ML**: OpenAI GPT-3.5-turbo
+- **AI/ML**: Ollama (Local LLM) - supports llama2, mistral, and other models
 - **Database**: SQLite
 - **Email API**: Gmail API
 - **Frontend**: HTML, CSS, JavaScript
@@ -182,9 +210,12 @@ Context-aware responses with customizable tone and additional instructions.
 - Add your email as a test user in Google Cloud Console
 - Ensure OAuth consent screen is configured
 
-### "OpenAI API key not configured"
-- Check `.env` file has `OPENAI_API_KEY`
-- Restart the application
+### "Ollama is not available" or AI features not working
+- Ensure Ollama is installed and running
+- Check if Ollama service is running: `ollama list` in terminal
+- Verify the model is pulled: `ollama list` (should show your model)
+- Check if `OLLAMA_BASE_URL` in `.env` matches your Ollama instance (default: `http://localhost:11434`)
+- Try a different model if one doesn't work well (edit `OLLAMA_MODEL` in `.env`)
 
 ### Database errors
 - Delete `email_data.db` and restart (will recreate)
@@ -203,4 +234,4 @@ For issues or questions, please open a GitHub issue.
 
 ---
 
-Built with ❤️ using OpenAI GPT-3.5-turbo
+Built with ❤️ using Ollama Local LLM

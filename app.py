@@ -2,12 +2,15 @@ import os
 import json
 import uuid
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, session, redirect, url_for, request, render_template, flash, jsonify
 from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from dotenv import load_dotenv
-from base64 import urlsafe_b64decode
+from base64 import urlsafe_b64decode, urlsafe_b64encode
+from email.mime.text import MIMEText
+import re
 from openai_helpers import (
     generate_summary, 
     generate_priority_label, 
@@ -28,7 +31,7 @@ app.secret_key = os.getenv("FLASK_SECRET_KEY") or "dev-secret"
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 REDIRECT_URI = os.getenv("GOOGLE_OAUTH_REDIRECT_URI", "http://localhost:5000/oauth2callback")
-SCOPES = os.getenv("SCOPES", "https://www.googleapis.com/auth/gmail.readonly").split()
+SCOPES = os.getenv("SCOPES", "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send").split()
 TOKEN_STORE = Path("./tokens")
 TOKEN_STORE.mkdir(exist_ok=True)
 
@@ -259,14 +262,25 @@ def api_get_message(message_id):
         snippet, body = parse_message_payload(msg)
         headers = {h["name"]: h["value"] for h in msg.get("payload", {}).get("headers", [])}
         
-        # Run all AI analysis
+        # Run all AI analysis IN PARALLEL for 5x faster performance
         subject = headers.get("Subject", "")
         text = body or snippet
-        summary = generate_summary(text)
-        priority = generate_priority_label(text)
-        sentiment_data = analyze_sentiment(text)
-        category = categorize_email(text, subject)
-        extracted_info = extract_information(text)
+        
+        # Execute all AI calls concurrently instead of sequentially
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            # Submit all tasks
+            future_summary = executor.submit(generate_summary, text)
+            future_priority = executor.submit(generate_priority_label, text)
+            future_sentiment = executor.submit(analyze_sentiment, text)
+            future_category = executor.submit(categorize_email, text, subject)
+            future_extracted = executor.submit(extract_information, text)
+            
+            # Get results (waits for all to complete)
+            summary = future_summary.result()
+            priority = future_priority.result()
+            sentiment_data = future_sentiment.result()
+            category = future_category.result()
+            extracted_info = future_extracted.result()
         
         # Prepare data
         email_data = {
@@ -301,13 +315,71 @@ def generate_reply_endpoint(message_id):
     if not creds:
         return jsonify({"error": "not authenticated"}), 401
 
-    service = build_gmail_service(creds)
-    msg = service.users().messages().get(userId="me", id=message_id, format="full").execute()
-    snippet, body = parse_message_payload(msg)
-    tone = request.json.get("tone", "professional")
-    extra = request.json.get("instructions", "")
-    draft = generate_reply(body or snippet, tone=tone, instructions=extra)
-    return jsonify({"reply": draft})
+    try:
+        service = build_gmail_service(creds)
+        msg = service.users().messages().get(userId="me", id=message_id, format="full").execute()
+        snippet, body = parse_message_payload(msg)
+        tone = request.json.get("tone", "professional")
+        extra = request.json.get("instructions", "")
+        draft = generate_reply(body or snippet, tone=tone, instructions=extra)
+        return jsonify({"reply": draft})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/send_reply/<message_id>", methods=["POST"])
+def send_reply_endpoint(message_id):
+    """Send a reply email via Gmail API"""
+    uid = session.get("user_id")
+    creds = load_credentials(uid)
+    if not creds:
+        return jsonify({"error": "not authenticated"}), 401
+
+    try:
+        service = build_gmail_service(creds)
+        
+        # Get original message to reply to
+        msg = service.users().messages().get(userId="me", id=message_id, format="full").execute()
+        headers = {h["name"]: h["value"] for h in msg.get("payload", {}).get("headers", [])}
+        original_from = headers.get("From", "")
+        original_subject = headers.get("Subject", "")
+        
+        # Extract email address from "Name <email@example.com>" format
+        email_match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', original_from)
+        reply_to = email_match.group(0) if email_match else original_from
+        
+        # Get reply text from request
+        reply_text = request.json.get("reply_text", "")
+        if not reply_text:
+            return jsonify({"error": "Reply text is required"}), 400
+        
+        # Create email message
+        reply_subject = f"Re: {original_subject}" if not original_subject.startswith("Re:") else original_subject
+        
+        # Create the email message using MIMEText
+        message_obj = MIMEText(reply_text)
+        message_obj['To'] = reply_to
+        message_obj['Subject'] = reply_subject
+        message_obj['In-Reply-To'] = headers.get("Message-ID", "")
+        message_obj['References'] = headers.get("Message-ID", "")
+        
+        raw_message = urlsafe_b64encode(message_obj.as_bytes()).decode('utf-8').replace('+', '-').replace('/', '_')
+        
+        # Send the email
+        send_message = service.users().messages().send(
+            userId="me",
+            body={'raw': raw_message}
+        ).execute()
+        
+        return jsonify({
+            "success": True,
+            "message_id": send_message.get("id"),
+            "message": "Reply sent successfully"
+        })
+    except Exception as e:
+        import traceback
+        print(f"Error sending reply: {traceback.format_exc()}")
+        return jsonify({"error": f"Failed to send reply: {str(e)}"}), 500
 
 
 # Optional: simple API endpoint to prioritize multiple messages
