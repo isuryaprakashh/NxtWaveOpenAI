@@ -141,6 +141,11 @@ def restore_single_token_session():
 
 @app.route("/")
 def index():
+    return render_template("home.html")
+
+
+@app.route("/login-page")
+def login_page():
     if session.get("user_id") and load_credentials(session["user_id"]):
         return redirect(url_for("inbox"))
     return render_template("login.html")

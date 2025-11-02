@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ODIN - AI Email Assistant</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: #ffffff;
+      color: #1a1a1a;
+      line-height: 1.6;
+    }
+
+    /* Navigation */
+    .navbar {
+      background: #ffffff;
+      border-bottom: 1px solid #e5e5e5;
+      padding: 1rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .navbar h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #1a1a1a;
+      letter-spacing: -0.5px;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 1.5rem;
+      align-items: center;
+    }
+
+    .nav-links a {
+      color: #666;
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover {
+      color: #1a1a1a;
+    }
+
+    .btn-nav {
+      background: #1a1a1a;
+      color: #ffffff;
+      padding: 0.5rem 1.25rem;
+      border-radius: 6px;
+      text-decoration: none;
+      font-size: 0.875rem;
+      font-weight: 600;
+      transition: background 0.2s;
+    }
+
+    .btn-nav:hover {
+      background: #333;
+    }
+
+    /* Hero Section */
+    .hero {
+      background: linear-gradient(to bottom, #ffffff 0%, #fafafa 100%);
+      padding: 8rem 2rem 6rem;
+      text-align: center;
+      border-bottom: 1px solid #e5e5e5;
+    }
+
+    .hero-content {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .hero h1 {
+      font-size: 5rem;
+      font-weight: 700;
+      color: #1a1a1a;
+      margin-bottom: 1.5rem;
+      letter-spacing: -2px;
+      line-height: 1.1;
+    }
+
+    .hero-tagline {
+      font-size: 1.5rem;
+      color: #666;
+      margin-bottom: 2rem;
+      font-weight: 400;
+      line-height: 1.5;
+    }
+
+    .hero-description {
+      font-size: 1.125rem;
+      color: #666;
+      margin-bottom: 3rem;
+      max-width: 700px;
+      margin-left: auto;
+      margin-right: auto;
+      line-height: 1.7;
+    }
+
+    .hero-cta {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .btn-primary {
+      background: #1a1a1a;
+      color: #ffffff;
+      padding: 1rem 2.5rem;
+      border: 1px solid #1a1a1a;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      text-decoration: none;
+      display: inline-block;
+      transition: all 0.2s;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .btn-primary:hover {
+      background: #333;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+
+    .btn-secondary {
+      background: #ffffff;
+      color: #1a1a1a;
+      padding: 1rem 2.5rem;
+      border: 1px solid #e5e5e5;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      text-decoration: none;
+      display: inline-block;
+      transition: all 0.2s;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .btn-secondary:hover {
+      background: #fafafa;
+      border-color: #1a1a1a;
+    }
+
+    /* Features Section */
+    .features {
+      padding: 6rem 2rem;
+      background: #ffffff;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .section-title {
+      text-align: center;
+      margin-bottom: 4rem;
+    }
+
+    .section-title h2 {
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: #1a1a1a;
+      margin-bottom: 1rem;
+      letter-spacing: -1px;
+    }
+
+    .section-title p {
+      font-size: 1.125rem;
+      color: #666;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 2rem;
+      margin-top: 3rem;
+    }
+
+    .feature-card {
+      background: #fafafa;
+      border: 1px solid #e5e5e5;
+      border-radius: 8px;
+      padding: 2.5rem;
+      transition: all 0.3s;
+    }
+
+    .feature-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+      border-color: #1a1a1a;
+    }
+
+    .feature-icon {
+      font-size: 3rem;
+      margin-bottom: 1.5rem;
+      color: #1a1a1a;
+      font-weight: 700;
+      opacity: 0.3;
+      letter-spacing: -2px;
+    }
+
+    .feature-card h3 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: #1a1a1a;
+      margin-bottom: 1rem;
+    }
+
+    .feature-card p {
+      font-size: 1rem;
+      color: #666;
+      line-height: 1.7;
+    }
+
+    /* Stats Section */
+    .stats {
+      background: #1a1a1a;
+      color: #ffffff;
+      padding: 4rem 2rem;
+      text-align: center;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 3rem;
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    .stat-item h3 {
+      font-size: 3rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+    }
+
+    .stat-item p {
+      font-size: 1rem;
+      color: #999;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    /* CTA Section */
+    .cta-section {
+      background: #fafafa;
+      padding: 6rem 2rem;
+      text-align: center;
+      border-top: 1px solid #e5e5e5;
+    }
+
+    .cta-section h2 {
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: #1a1a1a;
+      margin-bottom: 1rem;
+      letter-spacing: -1px;
+    }
+
+    .cta-section p {
+      font-size: 1.125rem;
+      color: #666;
+      margin-bottom: 2.5rem;
+      max-width: 600px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    /* Footer */
+    .footer {
+      background: #1a1a1a;
+      color: #999;
+      padding: 3rem 2rem;
+      text-align: center;
+      border-top: 1px solid #333;
+    }
+
+    .footer p {
+      font-size: 0.875rem;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .hero h1 {
+        font-size: 3rem;
+      }
+
+      .hero-tagline {
+        font-size: 1.25rem;
+      }
+
+      .hero-description {
+        font-size: 1rem;
+      }
+
+      .features-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .section-title h2 {
+        font-size: 2rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Navigation -->
+  <nav class="navbar">
+    <h1>ODIN</h1>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#how-it-works">How It Works</a>
+      <a href="{{ url_for('login_page') }}" class="btn-nav">Sign In</a>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-content">
+      <h1>ODIN</h1>
+      <p class="hero-tagline">AI-Powered Email Intelligence</p>
+      <p class="hero-description">
+        Transform your inbox into a strategic command center. ODIN uses advanced AI to analyze, prioritize, and respond to your emails with unmatched intelligence and speed.
+      </p>
+      <div class="hero-cta">
+        <a href="{{ url_for('login_page') }}" class="btn-primary">Get Started</a>
+        <a href="#features" class="btn-secondary">Learn More</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features Section -->
+  <section class="features" id="features">
+    <div class="container">
+      <div class="section-title">
+        <h2>Powerful Features</h2>
+        <p>Everything you need to master your inbox</p>
+      </div>
+
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">01</div>
+          <h3>Smart Priority Detection</h3>
+          <p>Automatically classify emails as HIGH, MEDIUM, or LOW priority using advanced AI. Focus on what matters most.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">02</div>
+          <h3>Intelligent Summarization</h3>
+          <p>Get instant, concise summaries of lengthy emails. Save time and stay informed without reading every word.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">03</div>
+          <h3>AI-Generated Replies</h3>
+          <p>Draft professional responses in seconds. Customize tone from professional to friendly, and let AI handle the rest.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">04</div>
+          <h3>Smart Categorization</h3>
+          <p>Automatically organize emails into categories: Urgent Support, Work/Business, Personal, Newsletter, and more.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">05</div>
+          <h3>Sentiment Analysis</h3>
+          <p>Understand the emotional tone of incoming emails. Know when a response requires urgency or empathy.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">06</div>
+          <h3>Information Extraction</h3>
+          <p>Automatically extract key information: email addresses, phone numbers, dates, and action items from your emails.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Stats Section -->
+  <section class="stats">
+    <div class="stats-grid">
+      <div class="stat-item">
+        <h3>5x</h3>
+        <p>Faster Processing</p>
+      </div>
+      <div class="stat-item">
+        <h3>100%</h3>
+        <p>Local AI Privacy</p>
+      </div>
+      <div class="stat-item">
+        <h3>24/7</h3>
+        <p>Always Available</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- How It Works -->
+  <section class="features" id="how-it-works">
+    <div class="container">
+      <div class="section-title">
+        <h2>How It Works</h2>
+        <p>Simple, secure, and powerful</p>
+      </div>
+
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">1</div>
+          <h3>Connect Your Gmail</h3>
+          <p>Securely authenticate with your Google account using OAuth 2.0. Your data stays private and secure.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">2</div>
+          <h3>AI Analyzes Emails</h3>
+          <p>ODIN uses local AI models to analyze your emails in parallel, providing insights in seconds, not minutes.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">3</div>
+          <h3>Take Action</h3>
+          <p>Review summaries, prioritize responses, and send AI-generated replies directly from your inbox.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA Section -->
+  <section class="cta-section">
+    <h2>Ready to Transform Your Inbox?</h2>
+    <p>Join ODIN and experience the future of email management. Get started in seconds.</p>
+    <a href="{{ url_for('login_page') }}" class="btn-primary">Start Using ODIN</a>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>&copy; 2024 ODIN. AI Email Assistant powered by Ollama Local LLM.</p>
+  </footer>
+</body>
+</html>
+
