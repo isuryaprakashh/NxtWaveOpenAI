@@ -15,6 +15,7 @@ from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from dotenv import load_dotenv
+load_dotenv()
 from base64 import urlsafe_b64decode, urlsafe_b64encode
 from email.mime.text import MIMEText
 
@@ -25,7 +26,7 @@ from openai_helpers import (
 from database import save_email_analysis, get_analytics, get_email_by_id, search_emails, delete_email_by_id
 
 # Load environment variables
-load_dotenv()
+# Load environment variables
 
 # ============ Configuration ============
 DEBUG = os.getenv("FLASK_DEBUG", "true").lower() == "true"
@@ -271,6 +272,77 @@ def _clean_email_body(body_text: str) -> str:
 
 # ============ API Routes ============
 
+@app.route("/api/auth/check")
+def api_auth_check():
+    """Check if user is authenticated."""
+    uid = session.get("user_id")
+    creds = load_credentials(uid)
+    if creds:
+        return jsonify({"authenticated": True, "user_id": uid})
+    return jsonify({"authenticated": False})
+
+
+@app.route("/api/inbox")
+def api_inbox():
+    """Return inbox emails as JSON for React frontend."""
+    uid = session.get("user_id")
+    creds = load_credentials(uid)
+    if not creds:
+        return jsonify({"error": "not authenticated"}), 401
+    
+    service = build_gmail_service(creds)
+    query = request.args.get("q", "")
+    
+    try:
+        msg_list = service.users().messages().list(
+            userId="me", maxResults=50, q=query
+        ).execute().get("messages", [])
+        
+        messages = []
+        for m in msg_list:
+            msg = service.users().messages().get(
+                userId="me", id=m["id"], format="full"
+            ).execute()
+            headers = {h["name"]: h["value"] for h in msg.get("payload", {}).get("headers", [])}
+            labels = msg.get("labelIds", [])
+            
+            # Extract attachments
+            attachments = []
+            def find_attachments(part):
+                filename = part.get("filename", "")
+                if filename:
+                    body_data = part.get("body", {})
+                    attachments.append({
+                        "filename": filename,
+                        "mimeType": part.get("mimeType", ""),
+                        "size": body_data.get("size", 0),
+                        "attachmentId": body_data.get("attachmentId", "")
+                    })
+                for subpart in part.get("parts", []):
+                    find_attachments(subpart)
+            
+            payload = msg.get("payload", {})
+            find_attachments(payload)
+            
+            messages.append({
+                "id": m["id"],
+                "snippet": msg.get("snippet", ""),
+                "from": headers.get("From", "(Unknown sender)"),
+                "subject": headers.get("Subject", "(No subject)"),
+                "date": headers.get("Date", "(No date)"),
+                "is_spam": "SPAM" in labels,
+                "labels": labels,
+                "attachments": attachments,
+                "has_attachments": len(attachments) > 0
+            })
+        
+        return jsonify({"messages": messages})
+    
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/message/<message_id>")
 def api_get_message(message_id: str):
     """Return message details as JSON, including all AI analysis."""
@@ -425,9 +497,16 @@ def api_chat():
     # Search database with user_id for security
     relevant_emails = search_emails(question, user_id=uid, limit=20)
     
+    # Fallback: If no keywords match, fetch recent emails
+    # This enables questions like "Summarize my inbox" or "What's new?"
+    is_fallback = False
+    if not relevant_emails:
+        relevant_emails = search_emails("", user_id=uid, limit=15)
+        is_fallback = True
+        
     if not relevant_emails:
         return jsonify({
-            "answer": "I couldn't find any emails matching your query in the database. Try different keywords.",
+            "answer": "I couldn't find any emails in your inbox to analyze. Please try refreshing your inbox.",
             "sources": []
         })
     
@@ -521,19 +600,14 @@ def restore_single_token_session():
 
 @app.route("/")
 def index():
-    """Home page - redirects to inbox if authenticated."""
-    if session.get("user_id"):
-        if load_credentials(session["user_id"]):
-            return redirect(url_for("inbox"))
-    return render_template("home.html")
+    """Redirect to React home page."""
+    return redirect("http://localhost:5173")
 
 
 @app.route("/login-page")
 def login_page():
-    """Login page with Google OAuth button."""
-    if session.get("user_id") and load_credentials(session["user_id"]):
-        return redirect(url_for("inbox"))
-    return render_template("login.html")
+    """Redirect to React (login handled by Flask OAuth)."""
+    return redirect("http://localhost:5173")
 
 
 @app.route("/login")
@@ -559,8 +633,8 @@ def oauth2callback():
     user_id = str(uuid.uuid4())
     session["user_id"] = user_id
     save_credentials(user_id, creds)
-    flash("Logged in successfully.", "success")
-    return redirect(url_for("inbox"))
+    # Redirect to React frontend
+    return redirect("http://localhost:5173/inbox")
 
 
 @app.route("/logout")
@@ -574,132 +648,34 @@ def logout():
         except FileNotFoundError:
             pass
     session.clear()
-    flash("Logged out.", "info")
-    return redirect(url_for("index"))
+    # Redirect to React frontend
+    return redirect("http://localhost:5173")
 
 
 @app.route("/chat")
 def chat_page():
-    """Chat with inbox page."""
-    uid = session.get("user_id")
-    if not uid:
-        return redirect(url_for("index"))
-    return render_template("chat.html")
+    """Redirect to React chat page."""
+    return redirect("http://localhost:5173/chat")
 
 
 @app.route("/inbox")
 def inbox():
-    """Main inbox view."""
-    uid = session.get("user_id")
-    if not uid:
-        return redirect(url_for("index"))
+    """Redirect to React inbox page."""
+    return redirect("http://localhost:5173/inbox")
 
-    creds = load_credentials(uid)
-    if not creds:
-        flash("Please sign in.", "warning")
-        return redirect(url_for("index"))
 
-    try:
-        service = build_gmail_service(creds)
-        
-        query = request.args.get("q", "")
-        gmail_query = query if query else "in:inbox OR in:spam"
-        
-        resp = service.users().messages().list(
-            userId="me", 
-            maxResults=30, 
-            q=gmail_query,
-            includeSpamTrash=True 
-        ).execute()
-        
-        msg_list = resp.get("messages", [])
-        messages = []
-
-        for m in msg_list:
-            msg = service.users().messages().get(
-                userId="me", id=m["id"], format="full"
-            ).execute()
-            headers = {h["name"]: h["value"] for h in msg.get("payload", {}).get("headers", [])}
-            labels = msg.get("labelIds", [])
-            
-            # Extract attachments
-            attachments = []
-            def find_attachments(part):
-                """Recursively find attachments in message parts."""
-                filename = part.get("filename", "")
-                if filename:
-                    attachments.append({
-                        "filename": filename,
-                        "mimeType": part.get("mimeType", ""),
-                        "size": part.get("body", {}).get("size", 0),
-                        "attachmentId": part.get("body", {}).get("attachmentId", "")
-                    })
-                for subpart in part.get("parts", []):
-                    find_attachments(subpart)
-            
-            payload = msg.get("payload", {})
-            find_attachments(payload)
-            
-            messages.append({
-                "id": m["id"],
-                "snippet": msg.get("snippet", ""),
-                "from": headers.get("From", "(Unknown sender)"),
-                "subject": headers.get("Subject", "(No subject)"),
-                "date": headers.get("Date", "(No date)"),
-                "is_spam": "SPAM" in labels,
-                "labels": labels,
-                "attachments": attachments,
-                "has_attachments": len(attachments) > 0
-            })
-
-        if not messages:
-            flash("No messages found.", "info")
-
-        return render_template("inbox.html", messages=messages)
-
-    except Exception as e:
-        print(f"Error fetching inbox: {e}")
-        traceback.print_exc()
-        flash("Error fetching inbox messages. Check console for details.", "danger")
-        return render_template("inbox.html", messages=[])
 
 
 @app.route("/message/<message_id>")
 def message_detail(message_id: str):
-    """Individual message detail view."""
-    uid = session.get("user_id")
-    creds = load_credentials(uid)
-    if not creds:
-        return redirect(url_for("index"))
-    
-    # Check for refresh parameter
-    refresh = request.args.get("refresh", "0") == "1"
-    if refresh:
-        delete_email_by_id(message_id, uid)
-    
-    response = api_get_message(message_id)
-    if isinstance(response, tuple):
-        flash("Error loading message", "danger")
-        return redirect(url_for("inbox"))
-    
-    data = response.get_json()
-    data["message_id"] = message_id  # Pass message_id for refresh button
-    return render_template("message.html", **data)
+    """Redirect to React message page."""
+    return redirect(f"http://localhost:5173/message/{message_id}")
 
 
 @app.route("/analytics")
 def analytics():
-    """Analytics dashboard view."""
-    uid = session.get("user_id")
-    if not uid:
-        return redirect(url_for("index"))
-    
-    creds = load_credentials(uid)
-    if not creds:
-        return redirect(url_for("index"))
-    
-    analytics_data = get_analytics(uid)
-    return render_template("analytics.html", analytics=analytics_data)
+    """Redirect to React analytics page."""
+    return redirect("http://localhost:5173/analytics")
 
 
 @app.route("/generate_reply/<message_id>", methods=["POST"])
