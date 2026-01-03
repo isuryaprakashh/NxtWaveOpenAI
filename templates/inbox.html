@@ -301,171 +301,217 @@
     {% endif %}
     {% endwith %}
 
-    <div class="stats-grid">
-      <div class="stat-card">
-        <h3 id="total-count">{{ messages|length }}</h3>
-        <p>Total Emails</p>
+    <div class="content-wrapper">
+      <!-- Search Bar -->
+      <div style="margin-bottom: 2rem; max-width: 800px; margin-left: auto; margin-right: auto;">
+        <form action="{{ url_for('inbox') }}" method="get" style="display: flex; gap: 10px;">
+          <input type="text" name="q" placeholder="Search emails..." class="form-control"
+            value="{{ request.args.get('q', '') }}"
+            style="flex: 1; padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid #e5e5e5; font-size: 1rem;">
+          <button type="submit" class="btn btn-primary"
+            style="padding: 0 1.5rem; display: flex; align-items: center; justify-content: center;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+          </button>
+          {% if request.args.get('q') %}
+          <a href="{{ url_for('inbox') }}" class="btn btn-secondary"
+            style="display: flex; align-items: center; text-decoration: none; padding: 0 1rem; color: #666; border-color: #e5e5e5;">Clear</a>
+          {% endif %}
+        </form>
       </div>
-      <div class="stat-card">
-        <h3 id="selected-count">0</h3>
-        <p>Selected</p>
-      </div>
-    </div>
 
-    {% if messages %}
-    <div class="controls">
-      <button class="btn btn-primary" onclick="analyzeSelected()">Analyze Selected</button>
-      <button class="btn btn-secondary" onclick="selectAll()">Select All</button>
-      <button class="btn btn-secondary" onclick="clearSelection()">Clear</button>
-      <select id="filterCategory" onchange="filterByCategory()">
-        <option value="">All Categories</option>
-        <option value="Urgent Support">Urgent Support</option>
-        <option value="Work/Business">Work/Business</option>
-        <option value="Personal">Personal</option>
-        <option value="Newsletter">Newsletter</option>
-        <option value="Spam/Promotional">Spam/Promotional</option>
-      </select>
-      <select id="sortOrder" onchange="sortEmails()">
-        <option value="date_desc">Newest First</option>
-        <option value="date_asc">Oldest First</option>
-      </select>
-    </div>
-
-    <div class="email-list">
-      {% for mail in messages %}
-      <div class="email-item" data-id="{{ mail.id }}" data-date="{{ mail.date }}"
-        onclick="openEmail('{{ mail.id }}', event)">
-        <input type="checkbox" class="email-checkbox" data-id="{{ mail.id }}"
-          onclick="event.stopPropagation(); updateSelectedCount();">
-        <div class="email-content">
-          <div class="email-header">
-            <span class="email-from">{{ mail.from }}</span>
-            <span class="email-date">{{ mail.date }}</span>
+      <div class="email-list-container">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <h3 id="total-count">{{ messages|length }}</h3>
+            <p>Total Emails</p>
           </div>
-          <div class="email-subject">{{ mail.subject }}</div>
-          <div class="email-snippet">{{ mail.snippet }}</div>
+          <div class="stat-card">
+            <h3 id="selected-count">0</h3>
+            <p>Selected</p>
+          </div>
         </div>
+
+        {% if messages %}
+        <div class="controls">
+          <button class="btn btn-primary" onclick="analyzeSelected()">Analyze Selected</button>
+          <button class="btn btn-secondary" onclick="selectAll()">Select All</button>
+          <button class="btn btn-secondary" onclick="clearSelection()">Clear</button>
+          <select id="filterCategory" onchange="filterByCategory()">
+            <option value="">All Categories</option>
+            <option value="Urgent Support">Urgent Support</option>
+            <option value="Work/Business">Work/Business</option>
+            <option value="Personal">Personal</option>
+            <option value="Newsletter">Newsletter</option>
+            <option value="Spam/Promotional">Spam/Promotional</option>
+          </select>
+          <select id="sortOrder" onchange="sortEmails()">
+            <option value="date_desc">Newest First</option>
+            <option value="date_asc">Oldest First</option>
+          </select>
+        </div>
+
+        <div class="email-list">
+          {% for mail in messages %}
+          <div class="email-item" data-id="{{ mail.id }}" data-date="{{ mail.date }}"
+            onclick="openEmail('{{ mail.id }}', event)">
+            <input type="checkbox" class="email-checkbox" data-id="{{ mail.id }}"
+              onclick="event.stopPropagation(); updateSelectedCount();">
+            <div class="email-content">
+              <div class="email-header">
+                <span class="email-from">{{ mail.from }}</span>
+                <span class="email-date">{{ mail.date }}</span>
+              </div>
+              <h3 class="email-subject">
+                {{ mail.subject }}
+                {% if mail.is_spam %}
+                <span
+                  style="background: #ef4444; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; margin-left: 8px;">SPAM</span>
+                {% endif %}
+              </h3>
+              <p class="email-snippet">{{ mail.snippet }}</p>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+
+        <div id="detail-panel"></div>
+        {% else %}
+        <div class="email-list">
+          <div class="empty-state">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z">
+              </path>
+            </svg>
+            <h3>No emails found</h3>
+            <p>Your inbox is empty or no messages match the current filter.</p>
+          </div>
+        </div>
+        {% endif %}
       </div>
-      {% endfor %}
-    </div>
 
-    <div id="detail-panel"></div>
-    {% else %}
-    <div class="email-list">
-      <div class="empty-state">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-            d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z">
-          </path>
-        </svg>
-        <h3>No emails found</h3>
-        <p>Your inbox is empty or no messages match the current filter.</p>
-      </div>
-    </div>
-    {% endif %}
-  </div>
+      <script>
+        function updateSelectedCount() {
+          const count = document.querySelectorAll('.email-checkbox:checked').length;
+          document.getElementById('selected-count').textContent = count;
+        }
 
-  <script>
-    function updateSelectedCount() {
-      const count = document.querySelectorAll('.email-checkbox:checked').length;
-      document.getElementById('selected-count').textContent = count;
-    }
+        function selectAll() {
+          document.querySelectorAll('.email-checkbox').forEach(cb => cb.checked = true);
+          updateSelectedCount();
+        }
 
-    function selectAll() {
-      document.querySelectorAll('.email-checkbox').forEach(cb => cb.checked = true);
-      updateSelectedCount();
-    }
+        function clearSelection() {
+          document.querySelectorAll('.email-checkbox').forEach(cb => cb.checked = false);
+          updateSelectedCount();
+          document.getElementById('detail-panel').classList.remove('show');
+        }
 
-    function clearSelection() {
-      document.querySelectorAll('.email-checkbox').forEach(cb => cb.checked = false);
-      updateSelectedCount();
-      document.getElementById('detail-panel').classList.remove('show');
-    }
-
-    async function analyzeSelected() {
-      const selected = Array.from(document.querySelectorAll('.email-checkbox:checked')).map(cb => cb.dataset.id);
-      if (!selected.length) {
-        alert('Please select at least one email');
-        return;
-      }
-
-      const panel = document.getElementById('detail-panel');
-      panel.innerHTML = '<div style="text-align: center; padding: 2rem; color: #666;">Analyzing emails...</div>';
-      panel.classList.add('show');
-
-      try {
-        const results = await Promise.all(selected.map(id =>
-          fetch(`/api/message/${id}`).then(r => r.json())
-        ));
-
-        let html = '<h2 style="margin-bottom: 1.5rem; color: #1a1a1a; font-weight: 600;">Analysis Results</h2>';
-        results.forEach(data => {
-          const priorityLower = data.priority ? data.priority.toLowerCase() : 'medium';
-          const sentimentColor = data.sentiment === 'positive' ? '#388e3c' : data.sentiment === 'negative' ? '#d32f2f' : '#666';
-          const sentimentScore = data.sentiment_score ? (data.sentiment_score * 100).toFixed(0) : '50';
-
-          html += '<div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem;">';
-          html += '<h3 style="color: #1a1a1a; margin-bottom: 1rem; font-weight: 600;">' + (data.subject || 'No Subject') + '</h3>';
-          html += '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1rem;">';
-          html += '<div><strong>Priority:</strong> <span class="badge badge-' + priorityLower + '">' + data.priority + '</span></div>';
-          html += '<div><strong>Sentiment:</strong> <span style="color: ' + sentimentColor + ';">' + data.sentiment + ' (' + sentimentScore + '%)</span></div>';
-          html += '<div><strong>Category:</strong> ' + data.category + '</div>';
-          html += '</div>';
-          html += '<div style="background: #fafafa; padding: 1rem; border-radius: 6px; border: 1px solid #e5e5e5; margin-bottom: 1rem;">';
-          html += '<strong>Summary:</strong><br><div style="margin-top: 0.5rem; white-space: pre-wrap;">' + data.summary + '</div>';
-          html += '</div>';
-
-          if (data.extracted_info && (data.extracted_info.action_items || data.extracted_info.dates)) {
-            html += '<div style="margin-top: 1rem;">';
-            if (data.extracted_info.action_items && data.extracted_info.action_items.length > 0) {
-              html += '<strong>Action Items:</strong><ul style="margin: 0.5rem 0 0 1.5rem;">';
-              data.extracted_info.action_items.forEach(item => {
-                html += '<li>' + item + '</li>';
-              });
-              html += '</ul>';
-            }
-            if (data.extracted_info.dates && data.extracted_info.dates.length > 0) {
-              html += '<strong>Important Dates:</strong> ' + data.extracted_info.dates.join(', ');
-            }
-            html += '</div>';
+        async function analyzeSelected() {
+          const selected = Array.from(document.querySelectorAll('.email-checkbox:checked')).map(cb => cb.dataset.id);
+          if (!selected.length) {
+            alert('Please select at least one email');
+            return;
           }
 
-          html += '<a href="/message/' + data.id + '" style="display: inline-block; margin-top: 1rem; color: #1a1a1a; text-decoration: none; font-weight: 600; border-bottom: 1px solid #1a1a1a;">View Full Details</a>';
-          html += '</div>';
-        });
+          const panel = document.getElementById('detail-panel');
+          panel.innerHTML = '<div style="text-align: center; padding: 2rem; color: #666;">Analyzing emails...</div>';
+          panel.classList.add('show');
 
-        panel.innerHTML = html;
-      } catch (error) {
-        panel.innerHTML = `<div style="color: #d32f2f;">Error: ${error.message}</div>`;
-      }
-    }
+          try {
+            const results = await Promise.all(selected.map(id =>
+              fetch(`/api/message/${id}`).then(r => r.json())
+            ));
 
-    function openEmail(id, event) {
-      if (event.target.type === 'checkbox') return;
-      window.location.href = `/message/${id}`;
-    }
+            let html = '<h2 style="margin-bottom: 1.5rem; color: #1a1a1a; font-weight: 600;">Analysis Results</h2>';
+            results.forEach(data => {
+              const priorityLower = data.priority ? data.priority.toLowerCase() : 'medium';
+              const sentimentColor = data.sentiment === 'positive' ? '#388e3c' : data.sentiment === 'negative' ? '#d32f2f' : '#666';
+              const sentimentScore = data.sentiment_score ? (data.sentiment_score * 100).toFixed(0) : '50';
 
-    function sortEmails() {
-      const order = document.getElementById('sortOrder').value;
-      const container = document.querySelector('.email-list');
-      const items = Array.from(document.querySelectorAll('.email-item'));
+              html += '<div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem;">';
+              html += '<h3 style="color: #1a1a1a; margin-bottom: 1rem; font-weight: 600;">' + (data.subject || 'No Subject') + '</h3>';
+              html += '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1rem;">';
+              html += '<div><strong>Priority:</strong> <span class="badge badge-' + priorityLower + '">' + data.priority + '</span></div>';
+              html += '<div><strong>Sentiment:</strong> <span style="color: ' + sentimentColor + ';">' + data.sentiment + ' (' + sentimentScore + '%)</span></div>';
+              html += '<div><strong>Category:</strong> ' + data.category + '</div>';
+              html += '</div>';
+              html += '<div style="background: #fafafa; padding: 1rem; border-radius: 6px; border: 1px solid #e5e5e5; margin-bottom: 1rem;">';
+              html += '<strong>Summary:</strong><br><div style="margin-top: 0.5rem; white-space: pre-wrap;">' + data.summary + '</div>';
+              html += '</div>';
 
-      items.sort((a, b) => {
-        const dateA = a.dataset.date || '';
-        const dateB = b.dataset.date || '';
-        return order === 'date_desc' ? dateB.localeCompare(dateA) : dateA.localeCompare(dateB);
-      });
+              if (data.extracted_info && (data.extracted_info.action_items || data.extracted_info.dates)) {
+                html += '<div style="margin-top: 1rem;">';
+                if (data.extracted_info.action_items && data.extracted_info.action_items.length > 0) {
+                  html += '<strong>Action Items:</strong><ul style="margin: 0.5rem 0 0 1.5rem;">';
+                  data.extracted_info.action_items.forEach(item => {
+                    html += '<li>' + item + '</li>';
+                  });
+                  html += '</ul>';
+                }
+                if (data.extracted_info.dates && data.extracted_info.dates.length > 0) {
+                  html += '<strong>Important Dates:</strong> ' + data.extracted_info.dates.join(', ');
+                }
+                html += '</div>';
+              }
 
-      items.forEach(item => container.appendChild(item));
-    }
+              html += '<a href="/message/' + data.id + '" style="display: inline-block; margin-top: 1rem; color: #1a1a1a; text-decoration: none; font-weight: 600; border-bottom: 1px solid #1a1a1a;">View Full Details</a>';
+              html += '</div>';
+            });
 
-    function filterByCategory() {
-      const category = document.getElementById('filterCategory').value;
-      // This would require category data on each email item
-      // For now, just a placeholder
-      alert('Category filtering will work after analyzing emails');
-    }
-  </script>
+            panel.innerHTML = html;
+          } catch (error) {
+            panel.innerHTML = `<div style="color: #d32f2f;">Error: ${error.message}</div>`;
+          }
+        }
+
+        function openEmail(id, event) {
+          if (event.target.type === 'checkbox') return;
+          window.location.href = `/message/${id}`;
+        }
+
+        function sortEmails() {
+          const order = document.getElementById('sortOrder').value;
+          const container = document.querySelector('.email-list');
+          const items = Array.from(document.querySelectorAll('.email-item'));
+
+          items.sort((a, b) => {
+            const dateA = a.dataset.date || '';
+            const dateB = b.dataset.date || '';
+            return order === 'date_desc' ? dateB.localeCompare(dateA) : dateA.localeCompare(dateB);
+          });
+
+          items.forEach(item => container.appendChild(item));
+        }
+
+
+        function filterByCategory() {
+          const category = document.getElementById('filterCategory').value.toLowerCase();
+          const items = document.querySelectorAll('.email-item');
+
+          if (!category) {
+            // Show all if no filter selected
+            items.forEach(item => item.style.display = 'flex');
+            return;
+          }
+
+          // Note: Category data comes from analyzed emails stored in localStorage or data attributes
+          // For now, filter is a no-op until emails are analyzed
+          // This would need server-side integration for full implementation
+          items.forEach(item => {
+            const itemCategory = item.dataset.category || '';
+            if (itemCategory.toLowerCase().includes(category)) {
+              item.style.display = 'flex';
+            } else {
+              item.style.display = 'none';
+            }
+          });
+        }
+      </script>
 </body>
 
 </html>

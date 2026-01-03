@@ -1,17 +1,31 @@
 """
-Database module for storing email metadata and analytics
+Database module for storing email metadata and analytics.
+Uses SQLite for persistent storage.
 """
 import sqlite3
 import json
 from datetime import datetime
 from pathlib import Path
+from typing import Dict, List, Optional
 
 DB_PATH = Path("./email_data.db")
 
 
-def init_db():
-    """Initialize the database with required tables"""
+def get_db_connection() -> sqlite3.Connection:
+    """
+    Get a database connection with row factory enabled.
+    
+    Returns:
+        SQLite connection with Row factory for dict-like access
+    """
     conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_db() -> None:
+    """Initialize the database with required tables."""
+    conn = get_db_connection()
     cursor = conn.cursor()
     
     # Create emails table
@@ -32,6 +46,11 @@ def init_db():
         )
     ''')
     
+    # Create index on user_id for faster queries
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_emails_user_id ON emails(user_id)
+    ''')
+    
     # Create extracted_info table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS extracted_info (
@@ -46,9 +65,17 @@ def init_db():
     conn.close()
 
 
-def save_email_analysis(email_data: dict):
-    """Save email and its AI analysis to database"""
-    conn = sqlite3.connect(DB_PATH)
+def save_email_analysis(email_data: Dict) -> bool:
+    """
+    Save email and its AI analysis to database.
+    
+    Args:
+        email_data: Dictionary containing email data and analysis
+        
+    Returns:
+        True if saved successfully, False otherwise
+    """
+    conn = get_db_connection()
     cursor = conn.cursor()
     
     try:
@@ -75,6 +102,9 @@ def save_email_analysis(email_data: dict):
             info = email_data['extracted_info']
             email_id = email_data.get('id')
             
+            # Clear old extracted info for this email
+            cursor.execute('DELETE FROM extracted_info WHERE email_id = ?', (email_id,))
+            
             for email in info.get('emails', []):
                 cursor.execute('INSERT INTO extracted_info VALUES (?, ?, ?)', (email_id, 'email', email))
             for phone in info.get('phones', []):
@@ -85,15 +115,25 @@ def save_email_analysis(email_data: dict):
                 cursor.execute('INSERT INTO extracted_info VALUES (?, ?, ?)', (email_id, 'action_item', action))
         
         conn.commit()
+        return True
     except Exception as e:
         print(f"Error saving email: {e}")
+        return False
     finally:
         conn.close()
 
 
-def get_analytics(user_id: str) -> dict:
-    """Get analytics data for dashboard"""
-    conn = sqlite3.connect(DB_PATH)
+def get_analytics(user_id: str) -> Dict:
+    """
+    Get analytics data for dashboard.
+    
+    Args:
+        user_id: The user's unique identifier
+        
+    Returns:
+        Dictionary containing analytics data
+    """
+    conn = get_db_connection()
     cursor = conn.cursor()
     
     analytics = {
@@ -107,23 +147,27 @@ def get_analytics(user_id: str) -> dict:
     try:
         # Total emails
         cursor.execute('SELECT COUNT(*) FROM emails WHERE user_id = ?', (user_id,))
-        analytics['total_emails'] = cursor.fetchone()[0]
+        result = cursor.fetchone()
+        analytics['total_emails'] = result[0] if result else 0
         
         # Priority distribution
         cursor.execute('SELECT priority, COUNT(*) FROM emails WHERE user_id = ? GROUP BY priority', (user_id,))
-        for priority, count in cursor.fetchall():
+        for row in cursor.fetchall():
+            priority, count = row[0], row[1]
             if priority:
                 analytics['priority_distribution'][priority] = count
         
         # Sentiment distribution
         cursor.execute('SELECT sentiment, COUNT(*) FROM emails WHERE user_id = ? GROUP BY sentiment', (user_id,))
-        for sentiment, count in cursor.fetchall():
+        for row in cursor.fetchall():
+            sentiment, count = row[0], row[1]
             if sentiment:
                 analytics['sentiment_distribution'][sentiment] = count
         
         # Category distribution
         cursor.execute('SELECT category, COUNT(*) FROM emails WHERE user_id = ? GROUP BY category', (user_id,))
-        for category, count in cursor.fetchall():
+        for row in cursor.fetchall():
+            category, count = row[0], row[1]
             if category:
                 analytics['category_distribution'][category] = count
         
@@ -135,13 +179,13 @@ def get_analytics(user_id: str) -> dict:
         ''', (user_id,))
         analytics['recent_emails'] = [
             {
-                'id': row[0],
-                'subject': row[1],
-                'sender': row[2],
-                'priority': row[3],
-                'sentiment': row[4],
-                'category': row[5],
-                'processed_at': row[6]
+                'id': row['id'],
+                'subject': row['subject'],
+                'sender': row['sender'],
+                'priority': row['priority'],
+                'sentiment': row['sentiment'],
+                'category': row['category'],
+                'processed_at': row['processed_at']
             }
             for row in cursor.fetchall()
         ]
@@ -154,28 +198,89 @@ def get_analytics(user_id: str) -> dict:
     return analytics
 
 
-def get_email_by_id(email_id: str) -> dict:
-    """Retrieve email data from database"""
-    conn = sqlite3.connect(DB_PATH)
+def search_emails(query_text: str, user_id: str, limit: int = 20) -> List[Dict]:
+    """
+    Search emails by keyword in subject, body, or sender.
+    
+    Args:
+        query_text: The search query
+        user_id: The user's unique identifier (REQUIRED for security)
+        limit: Maximum number of results to return
+        
+    Returns:
+        List of matching email dictionaries
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    wildcard_query = f"%{query_text}%"
+    
+    try:
+        cursor.execute("""
+            SELECT id, subject, sender, date, snippet, body
+            FROM emails
+            WHERE user_id = ?
+              AND (subject LIKE ? 
+                   OR body LIKE ? 
+                   OR sender LIKE ?
+                   OR snippet LIKE ?)
+            ORDER BY date DESC
+            LIMIT ?
+        """, (user_id, wildcard_query, wildcard_query, wildcard_query, wildcard_query, limit))
+        
+        results = []
+        for row in cursor.fetchall():
+            results.append({
+                "id": row["id"],
+                "subject": row["subject"],
+                "sender": row["sender"],
+                "date": row["date"],
+                "snippet": row["snippet"],
+                "body": row["body"]
+            })
+        return results
+    except Exception as e:
+        print(f"Error searching emails: {e}")
+        return []
+    finally:
+        conn.close()
+
+
+def get_email_by_id(email_id: str, user_id: Optional[str] = None) -> Optional[Dict]:
+    """
+    Retrieve email data from database.
+    
+    Args:
+        email_id: The email's unique identifier
+        user_id: Optional user_id for access control
+        
+    Returns:
+        Email data dictionary or None if not found
+    """
+    conn = get_db_connection()
     cursor = conn.cursor()
     
     try:
-        cursor.execute('SELECT * FROM emails WHERE id = ?', (email_id,))
+        if user_id:
+            cursor.execute('SELECT * FROM emails WHERE id = ? AND user_id = ?', (email_id, user_id))
+        else:
+            cursor.execute('SELECT * FROM emails WHERE id = ?', (email_id,))
+        
         row = cursor.fetchone()
         if row:
             return {
-                'id': row[0],
-                'user_id': row[1],
-                'subject': row[2],
-                'sender': row[3],
-                'date': row[4],
-                'snippet': row[5],
-                'body': row[6],
-                'priority': row[7],
-                'sentiment': row[8],
-                'sentiment_score': row[9],
-                'category': row[10],
-                'processed_at': row[11]
+                'id': row['id'],
+                'user_id': row['user_id'],
+                'subject': row['subject'],
+                'sender': row['sender'],
+                'date': row['date'],
+                'snippet': row['snippet'],
+                'body': row['body'],
+                'priority': row['priority'],
+                'sentiment': row['sentiment'],
+                'sentiment_score': row['sentiment_score'],
+                'category': row['category'],
+                'processed_at': row['processed_at']
             }
     except Exception as e:
         print(f"Error retrieving email: {e}")

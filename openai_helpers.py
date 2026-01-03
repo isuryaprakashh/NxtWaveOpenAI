@@ -1,354 +1,211 @@
 """
-Ollama local LLM helper functions
+Gemini API helper functions
+AI-powered email analysis using Google's Gemini 2.5 Flash
 """
 import os
 import json
 import re
-import requests
+from typing import Optional, Dict, List
+import google.generativeai as genai
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
-# Ollama configuration
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-# Using FREE local model (llama3.1:8b) - no payment required
-# For cloud models that require payment, set OLLAMA_MODEL in .env file
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:8b")  # FREE local model - working perfectly!
+# ============ Configuration Constants ============
+MAX_OUTPUT_TOKENS = 1000
+EMAIL_BODY_TRUNCATE_LIMIT = 8000
+REPLY_CONTEXT_LIMIT = 4000
+TEMPERATURE = 0.2
 
-def check_ollama_available():
-    """Check if Ollama is running and accessible"""
+# Configure Gemini - API key should be set via environment variable
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if not GEMINI_API_KEY:
+    print("WARNING: GEMINI_API_KEY not set. AI features will not work.")
+    print("Please set GEMINI_API_KEY in your .env file.")
+else:
+    genai.configure(api_key=GEMINI_API_KEY)
+
+# Use Gemini 2.5 Flash - fast and efficient for email analysis
+MODEL_NAME = "gemini-2.5-flash"
+
+
+def get_model() -> genai.GenerativeModel:
+    """Get the configured GenerativeModel instance."""
+    return genai.GenerativeModel(MODEL_NAME)
+
+
+def call_gemini(prompt: str, json_mode: bool = False) -> Optional[str]:
+    """
+    Call Gemini API with the given prompt.
+    
+    Args:
+        prompt: The text prompt to send to the model
+        json_mode: If True, request JSON-formatted response
+        
+    Returns:
+        The model's response text, or None if an error occurred
+    """
     try:
-        response = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=2)
-        return response.status_code == 200
-    except Exception:
-        return False
+        model = get_model()
+        
+        generation_config = {
+            "temperature": TEMPERATURE,
+            "max_output_tokens": MAX_OUTPUT_TOKENS,
+        }
+        
+        if json_mode:
+            generation_config["response_mime_type"] = "application/json"
 
-def check_model_available(model_name: str) -> bool:
-    """Check if a specific model is available"""
-    try:
-        response = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=2)
-        if response.status_code == 200:
-            models = response.json().get("models", [])
-            model_names = [m.get("name", "") for m in models]
-            # Check if model name is in the list (handles tags like llama3.1:8b)
-            return any(model_name in name or name.startswith(model_name) for name in model_names)
-        return False
-    except Exception:
-        return False
-
-# Check availability dynamically each time (not just at startup)
-def get_ollama_status():
-    """Get current Ollama status"""
-    is_running = check_ollama_available()
-    model_available = False
-    if is_running:
-        model_available = check_model_available(OLLAMA_MODEL)
-    return is_running, model_available
-
-ollama_available = check_ollama_available()
-
-def call_ollama(messages: list, max_tokens: int = 200, temperature: float = 0.2) -> str:
-    """Call Ollama API with chat messages - automatically falls back to llama3.1:8b if needed"""
-    # Check dynamically if Ollama is available
-    is_running = check_ollama_available()
-    if not is_running:
-        print("Ollama is not running. Please start Ollama service.")
-        return None
-    
-    # List of models to try (in order of preference)
-    models_to_try = [OLLAMA_MODEL]
-    
-    # Always add llama3.1:8b as fallback if not already the primary model
-    if OLLAMA_MODEL != "llama3.1:8b":
-        models_to_try.append("llama3.1:8b")
-    
-    url = f"{OLLAMA_BASE_URL}/api/chat"
-    
-    for model_to_use in models_to_try:
-        try:
-            payload = {
-                "model": model_to_use,
-                "messages": messages,
-                "options": {
-                    "temperature": temperature,
-                    "num_predict": max_tokens
-                },
-                "stream": False
+        response = model.generate_content(
+            prompt,
+            generation_config=generation_config,
+            safety_settings={
+                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
             }
-            # Use appropriate timeout (120s for cloud models, 60s for local)
-            timeout = 120 if "cloud" in model_to_use.lower() else 60
-            response = requests.post(url, json=payload, timeout=timeout)
-            
-            # Handle payment required error (402) for cloud models
-            if response.status_code == 402:
-                print(f"⚠️ Model '{model_to_use}' requires payment. Trying next model...")
-                continue
-            
-            response.raise_for_status()
-            data = response.json()
-            content = data.get("message", {}).get("content", "").strip()
-            
-            if content:
-                return content
-            else:
-                # Check for error in response
-                if "error" in data:
-                    error_msg = data.get("error", "Unknown error")
-                    print(f"⚠️ Model '{model_to_use}' error: {error_msg}. Trying next model...")
-                    continue
-                # Log empty response for debugging
-                print(f"⚠️ Model '{model_to_use}' returned empty response. Trying next model...")
-                continue
-                
-        except requests.exceptions.ConnectionError:
-            print(f"Could not connect to Ollama at {OLLAMA_BASE_URL}. Is Ollama running?")
-            return None
-        except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 404:
-                print(f"⚠️ Model '{model_to_use}' not found. Trying next model...")
-                continue
-            elif e.response.status_code == 402:
-                print(f"⚠️ Model '{model_to_use}' requires payment. Trying next model...")
-                continue
-            else:
-                print(f"⚠️ Model '{model_to_use}' error (HTTP {e.response.status_code}): {str(e)}. Trying next model...")
-                continue
-        except Exception as e:
-            print(f"⚠️ Model '{model_to_use}' error: {str(e)}. Trying next model...")
-            continue
-    
-    # If all models failed, return None
-    print(f"⚠️ All models failed. Please check Ollama is running and at least one model is available.")
-    return None
+        )
+        
+        return response.text
+    except Exception as e:
+        print(f"Gemini API Error: {e}")
+        return None
 
 
-def generate_summary(text: str, max_tokens=200) -> str:
-    """Generate a concise summary of an email"""
-    is_running = check_ollama_available()
-    if not is_running:
-        return "⚠️ Ollama is not running. Please install and start Ollama.\nInstall: https://ollama.ai/download\nAfter install, pull model: ollama pull llama3.1:8b"
+def analyze_email_comprehensive(text: str, subject: str = "") -> Dict:
+    """
+    Perform ALL email analysis in a single API call for maximum speed.
     
-    # Ensure we have text to summarize
-    if not text or not text.strip():
-        return "No email content available to summarize."
+    Args:
+        text: The email body text
+        subject: The email subject line
+        
+    Returns:
+        Dict with: summary, priority, sentiment, category, extracted_info, quick_replies
+    """
+    if not text:
+        return _get_fallback_analysis()
+        
+    prompt = f"""
+    Analyze this email and provide the following in a SINGLE JSON object:
+    1. "summary": 2-4 bullet points with an actionable next step.
+    2. "priority": "HIGH", "MEDIUM", or "LOW" based on urgency.
+    3. "sentiment": object with "sentiment" ("positive", "negative", "neutral") and "score" (0.0-1.0).
+    4. "category": One of ["Urgent Support", "Work/Business", "Personal", "Newsletter", "Spam/Promotional", "General"].
+    5. "extracted_info": object with "action_items" (list) and "dates" (list).
+    6. "quick_replies": list of 3 distinct, short, professional reply options that directly address the sender's specific questions or content. Avoid generic responses; tailor them to the email's actual topic.
+
+    SUBJECT: {subject}
+    EMAIL BODY:
+    {text[:EMAIL_BODY_TRUNCATE_LIMIT]}
+    """
     
-    messages = [
-        {"role": "system", "content": "You are an assistant that summarizes emails concisely. Always provide a summary."},
-        {"role": "user", "content": f"Summarize the following email in 2-4 concise bullet points and give an actionable next-step.\n\nEMAIL:\n{text[:2000]}"}  # Limit text length
-    ]
-    
-    result = call_ollama(messages, max_tokens=max_tokens, temperature=0.2)
-    if result and result.strip():
-        return result
-    
-    # Fallback: provide a basic summary based on text length
-    return f"Email summary:\n• Contains {len(text)} characters\n• Review required\n\n⚠️ AI analysis unavailable. Ensure Ollama is running: http://localhost:11434"
+    result = call_gemini(prompt, json_mode=True)
+    if result:
+        try:
+            return json.loads(result)
+        except json.JSONDecodeError:
+            print("Failed to decode JSON from comprehensive analysis")
+            
+    return _get_fallback_analysis()
+
+
+def _get_fallback_analysis() -> Dict:
+    """Return fallback analysis structure when API fails."""
+    return {
+        "summary": "Analysis unavailable",
+        "priority": "MEDIUM",
+        "sentiment": {"sentiment": "neutral", "score": 0.5},
+        "category": "General",
+        "extracted_info": {"action_items": [], "dates": []},
+        "quick_replies": []
+    }
+
+
+# Legacy wrappers for backward compatibility
+def generate_summary(text: str, max_tokens: int = 200) -> str:
+    """Generate a summary of the email text."""
+    return analyze_email_comprehensive(text).get("summary", "")
 
 
 def generate_priority_label(text: str) -> str:
-    """Classify email priority as HIGH, MEDIUM, or LOW"""
-    is_running = check_ollama_available()
-    if not is_running:
-        return "MEDIUM"  # Default fallback
-    
-    # Use simple heuristics if text is very short
-    if not text or len(text.strip()) < 10:
-        return "MEDIUM"
-    
-    # Check for urgent keywords
-    urgent_keywords = ["urgent", "asap", "immediately", "critical", "emergency", "deadline", "important"]
-    text_lower = text.lower()
-    if any(keyword in text_lower for keyword in urgent_keywords):
-        return "HIGH"
-    
-    messages = [
-        {"role": "system", "content": "You are an assistant that classifies email priority. Respond with ONLY one word: HIGH, MEDIUM, or LOW. Do not include any other text."},
-        {"role": "user", "content": f"Classify the priority of this email:\n\n{text[:1000]}"}
-    ]
-    
-    result = call_ollama(messages, max_tokens=10, temperature=0)
-    if result:
-        label = result.upper().strip()
-        # Extract priority from response
-        if "HIGH" in label:
-            return "HIGH"
-        if "MEDIUM" in label:
-            return "MEDIUM"
-        if "LOW" in label:
-            return "LOW"
-    return "MEDIUM"  # Default fallback
+    """Generate priority label for the email."""
+    return analyze_email_comprehensive(text).get("priority", "MEDIUM")
 
 
-def analyze_sentiment(text: str) -> dict:
-    """Analyze sentiment of email - returns sentiment label and score"""
-    is_running = check_ollama_available()
-    if not is_running:
-        return {"sentiment": "neutral", "score": 0.5}  # Default fallback
-    
-    if not text or not text.strip():
-        return {"sentiment": "neutral", "score": 0.5}
-    
-    # Simple keyword-based sentiment analysis as fallback
-    positive_words = ["thank", "appreciate", "great", "excellent", "good", "pleased", "happy", "excited"]
-    negative_words = ["disappointed", "problem", "issue", "error", "failed", "urgent", "concern", "sorry"]
-    
-    text_lower = text.lower()
-    positive_count = sum(1 for word in positive_words if word in text_lower)
-    negative_count = sum(1 for word in negative_words if word in text_lower)
-    
-    messages = [
-        {"role": "system", "content": "Analyze the sentiment of the email. Respond ONLY with valid JSON in this exact format: {\"sentiment\": \"positive\" or \"negative\" or \"neutral\", \"score\": number between 0 and 1}. No other text."},
-        {"role": "user", "content": f"Email text:\n{text[:1000]}"}
-    ]
-    
-    result = call_ollama(messages, max_tokens=50, temperature=0)
-    if result:
-        try:
-            # Clean up response - sometimes model includes markdown code blocks
-            cleaned = result.strip()
-            if "```json" in cleaned:
-                cleaned = cleaned.split("```json")[1].split("```")[0].strip()
-            elif "```" in cleaned:
-                cleaned = cleaned.split("```")[1].split("```")[0].strip()
-            
-            # Try to parse JSON from response
-            result_json = json.loads(cleaned)
-            # Validate sentiment value
-            if result_json.get("sentiment") in ["positive", "negative", "neutral"]:
-                return result_json
-        except json.JSONDecodeError:
-            # If not JSON, try to extract sentiment from text
-            result_lower = result.lower()
-            sentiment = "neutral"
-            score = 0.5
-            if "positive" in result_lower:
-                sentiment = "positive"
-                score = 0.7
-            elif "negative" in result_lower:
-                sentiment = "negative"
-                score = 0.3
-            return {"sentiment": sentiment, "score": score}
-    
-    # Fallback to keyword-based analysis
-    if positive_count > negative_count:
-        return {"sentiment": "positive", "score": 0.6}
-    elif negative_count > positive_count:
-        return {"sentiment": "negative", "score": 0.4}
-    
-    return {"sentiment": "neutral", "score": 0.5}
+def analyze_sentiment(text: str) -> Dict:
+    """Analyze the sentiment of the email."""
+    return analyze_email_comprehensive(text).get("sentiment", {"sentiment": "neutral", "score": 0.5})
 
 
 def categorize_email(text: str, subject: str = "") -> str:
-    """Categorize email into predefined categories"""
-    is_running = check_ollama_available()
-    if not is_running:
-        return "General"  # Default fallback
-    
-    if not text and not subject:
-        return "General"
-    
-    categories = ["Urgent Support", "Work/Business", "Personal", "Newsletter", "Spam/Promotional", "General"]
-    
-    # Simple keyword-based categorization as fallback
-    combined_text = f"{subject} {text}".lower()
-    if any(word in combined_text for word in ["urgent", "support", "help", "issue", "problem", "critical"]):
-        return "Urgent Support"
-    if any(word in combined_text for word in ["newsletter", "subscribe", "unsubscribe", "promo", "discount"]):
-        return "Newsletter"
-    if any(word in combined_text for word in ["spam", "promotional", "offer", "deal", "sale"]):
-        return "Spam/Promotional"
-    if any(word in combined_text for word in ["meeting", "project", "deadline", "work", "business", "team"]):
-        return "Work/Business"
-    if any(word in combined_text for word in ["family", "friend", "personal", "birthday", "wedding"]):
-        return "Personal"
-    
-    messages = [
-        {"role": "system", "content": f"Categorize this email into ONE of these categories: {', '.join(categories)}. Respond with ONLY the category name. No other text."},
-        {"role": "user", "content": f"Subject: {subject[:200]}\n\nBody: {text[:800]}"}
-    ]
-    
-    result = call_ollama(messages, max_tokens=20, temperature=0)
-    if result:
-        category = result.strip()
-        # Validate category - check if any of our categories are mentioned
-        for cat in categories:
-            if cat.lower() in category.lower() or category.lower() in cat.lower():
-                return cat
-    
-    return "General"  # Default fallback
+    """Categorize the email into predefined categories."""
+    return analyze_email_comprehensive(text, subject).get("category", "General")
 
 
-def extract_information(text: str) -> dict:
-    """Extract structured information from email"""
-    info = {
-        "emails": [],
-        "phones": [],
-        "dates": [],
-        "action_items": []
-    }
+def extract_information(text: str) -> Dict:
+    """Extract structured information from the email."""
+    return analyze_email_comprehensive(text).get("extracted_info", {})
+
+
+def ask_gemini_with_context(question: str, context: str) -> str:
+    """
+    Ask Gemini a question based on provided email context.
     
-    # Extract emails
-    email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
-    info["emails"] = list(set(re.findall(email_pattern, text)))
+    Args:
+        question: The user's question
+        context: Relevant email content to use as context
+        
+    Returns:
+        The AI's answer based on the context
+    """
+    if not context:
+        return "I couldn't find any relevant emails to answer your question."
+        
+    prompt = f"""
+    You are a helpful AI Email Assistant. 
+    Answer the user's question mostly using the provided email context.
+    If the answer isn't in the context, say you don't know based on the emails found.
+    Cite specific emails by their Subject or Sender if relevant.
     
-    # Extract phone numbers (basic patterns)
-    phone_pattern = r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b|\b\(\d{3}\)\s*\d{3}[-.]?\d{4}\b'
-    info["phones"] = list(set(re.findall(phone_pattern, text)))
+    USER QUESTION: 
+    {question}
     
-    # Use AI to extract action items and dates
-    if check_ollama_available() and text:
-        try:
-            messages = [
-                {"role": "system", "content": "Extract action items and important dates from the email. Respond ONLY with valid JSON: {\"action_items\": [\"item1\", \"item2\"], \"dates\": [\"date1\", \"date2\"]}. If none found, use empty arrays."},
-                {"role": "user", "content": text[:2000]}  # Limit text length
-            ]
-            result = call_ollama(messages, max_tokens=200, temperature=0)
-            if result:
-                # Try to extract JSON from response
-                try:
-                    # Clean up response - sometimes model includes markdown code blocks
-                    cleaned = result.strip()
-                    if "```json" in cleaned:
-                        cleaned = cleaned.split("```json")[1].split("```")[0].strip()
-                    elif "```" in cleaned:
-                        cleaned = cleaned.split("```")[1].split("```")[0].strip()
-                    
-                    ai_info = json.loads(cleaned)
-                    info["action_items"] = ai_info.get("action_items", [])
-                    info["dates"] = ai_info.get("dates", [])
-                except json.JSONDecodeError:
-                    # If JSON parsing fails, try to extract action items from text
-                    lines = result.split("\n")
-                    for line in lines:
-                        line = line.strip()
-                        if line and (line.startswith("-") or line.startswith("*") or line[0].isdigit()):
-                            info["action_items"].append(line.lstrip("-* ").strip())
-        except Exception as e:
-            print(f"Error extracting AI info: {e}")
-            pass
+    RELEVANT EMAILS FOUND:
+    {context}
     
-    return info
+    ANSWER:
+    """
+    
+    result = call_gemini(prompt)
+    return result if result else "Sorry, I couldn't generate a response. Please try again."
 
 
 def generate_reply(email_text: str, tone: str = "professional", instructions: str = "") -> str:
-    """Generate a reply draft based on the original email"""
-    is_running = check_ollama_available()
-    if not is_running:
-        return "⚠️ Ollama is not running. Please install and start Ollama.\nInstall: https://ollama.ai/download\nAfter install, pull model: ollama pull llama3.1:8b"
+    """
+    Generate a reply draft based on the original email.
     
-    if not email_text or not email_text.strip():
-        return "No email content available to generate a reply."
+    Args:
+        email_text: The original email content
+        tone: The desired tone (professional, friendly, concise, formal, empathetic)
+        instructions: Additional instructions for the reply
+        
+    Returns:
+        Generated reply text
+    """
+    if not email_text:
+        return ""
+        
+    prompt = f"""
+    Draft a reply to the following email.
+    Tone: {tone}
+    Additional Instructions: {instructions}
     
-    system_msg = f"You are an assistant that drafts email replies in a {tone} tone. Do not include signatures. If the email asks questions, answer succinctly. Include 2-3 short paragraphs when needed. Always generate a complete reply."
+    - Do not include placeholders like "[Your Name]".
+    - Keep it concise and natural.
     
-    instruction_text = f"\n\nAdditional instructions: {instructions}" if instructions else ""
-    user_msg = f"Original email:\n{email_text[:1500]}{instruction_text}\n\nDraft a reply:"
+    ORIGINAL EMAIL:
+    {email_text[:REPLY_CONTEXT_LIMIT]}
+    """
     
-    messages = [
-        {"role": "system", "content": system_msg},
-        {"role": "user", "content": user_msg}
-    ]
-    
-    result = call_ollama(messages, max_tokens=400, temperature=0.3)
-    if result and result.strip():
-        return result
-    
-    # Final fallback: provide a template reply
-    return f"Thank you for your email.\n\nI have reviewed your message and will respond accordingly.\n\nBest regards"
+    result = call_gemini(prompt)
+    return result.strip() if result else "Error generating reply."

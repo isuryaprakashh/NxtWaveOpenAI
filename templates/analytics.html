@@ -334,93 +334,109 @@
     <script>
         const analytics = {{ analytics| tojson | safe }};
 
-        // Priority Chart
-        if (analytics && analytics.total_emails > 0) {
-            new Chart(document.getElementById('priorityChart'), {
-                type: 'doughnut',
-                data: {
-                    labels: ['High', 'Medium', 'Low'],
-                    datasets: [{
-                        data: [
-                            analytics.priority_distribution.HIGH || 0,
-                            analytics.priority_distribution.MEDIUM || 0,
-                            analytics.priority_distribution.LOW || 0
-                        ],
-                        backgroundColor: ['#c33', '#f57c00', '#388e3c'],
-                        borderWidth: 0
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'bottom'
-                        }
-                    }
-                }
-            });
-
-            // Sentiment Chart
-            new Chart(document.getElementById('sentimentChart'), {
-                type: 'pie',
-                data: {
-                    labels: ['Positive', 'Negative', 'Neutral'],
-                    datasets: [{
-                        data: [
-                            analytics.sentiment_distribution.positive || 0,
-                            analytics.sentiment_distribution.negative || 0,
-                            analytics.sentiment_distribution.neutral || 0
-                        ],
-                        backgroundColor: ['#388e3c', '#c33', '#999'],
-                        borderWidth: 0
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'bottom'
-                        }
-                    }
-                }
-            });
-
-            // Category Chart
-            const categories = Object.keys(analytics.category_distribution);
-            const categoryCounts = Object.values(analytics.category_distribution);
-
-            new Chart(document.getElementById('categoryChart'), {
-                type: 'bar',
-                data: {
-                    labels: categories,
-                    datasets: [{
-                        label: 'Number of Emails',
-                        data: categoryCounts,
-                        backgroundColor: '#1a1a1a',
-                        borderRadius: 8
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            display: false
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: {
-                                stepSize: 1
+        // Wait for DOM to be ready
+        document.addEventListener('DOMContentLoaded', function() {
+            // Priority Chart
+            if (analytics && analytics.total_emails > 0) {
+                const priorityCtx = document.getElementById('priorityChart');
+                if (priorityCtx) {
+                    new Chart(priorityCtx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['High', 'Medium', 'Low'],
+                            datasets: [{
+                                data: [
+                                    analytics.priority_distribution.HIGH || 0,
+                                    analytics.priority_distribution.MEDIUM || 0,
+                                    analytics.priority_distribution.LOW || 0
+                                ],
+                                backgroundColor: ['#c33', '#f57c00', '#388e3c'],
+                                borderWidth: 0
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    position: 'bottom'
+                                }
                             }
                         }
+                    });
+                }
+
+                // Sentiment Chart
+                const sentimentCtx = document.getElementById('sentimentChart');
+                if (sentimentCtx) {
+                    new Chart(sentimentCtx, {
+                        type: 'pie',
+                        data: {
+                            labels: ['Positive', 'Negative', 'Neutral'],
+                            datasets: [{
+                                data: [
+                                    analytics.sentiment_distribution.positive || 0,
+                                    analytics.sentiment_distribution.negative || 0,
+                                    analytics.sentiment_distribution.neutral || 0
+                                ],
+                                backgroundColor: ['#388e3c', '#c33', '#999'],
+                                borderWidth: 0
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    position: 'bottom'
+                                }
+                            }
+                        }
+                    });
+                }
+
+                // Category Chart
+                const categoryCtx = document.getElementById('categoryChart');
+                if (categoryCtx) {
+                    const categories = Object.keys(analytics.category_distribution || {});
+                    const categoryCounts = Object.values(analytics.category_distribution || {});
+
+                    if (categories.length > 0) {
+                        new Chart(categoryCtx, {
+                            type: 'bar',
+                            data: {
+                                labels: categories,
+                                datasets: [{
+                                    label: 'Number of Emails',
+                                    data: categoryCounts,
+                                    backgroundColor: '#1a1a1a',
+                                    borderRadius: 8
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    legend: {
+                                        display: false
+                                    }
+                                },
+                                scales: {
+                                    y: {
+                                        beginAtZero: true,
+                                        ticks: {
+                                            stepSize: 1
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                    } else {
+                        categoryCtx.parentElement.innerHTML = '<div class="empty-state">No category data available</div>';
                     }
                 }
-            });
-        }
+            }
+        });
     </script>
 </body>
 

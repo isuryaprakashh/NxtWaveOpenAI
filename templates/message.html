@@ -1,19 +1,24 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{ subject }} - AI Email Assistant</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       background: #f5f5f5;
       color: #1a1a1a;
       line-height: 1.6;
     }
-    
+
     .navbar {
       background: #ffffff;
       border-bottom: 1px solid #e5e5e5;
@@ -22,20 +27,20 @@
       justify-content: space-between;
       align-items: center;
     }
-    
+
     .navbar h1 {
       font-size: 1.25rem;
       font-weight: 600;
       color: #1a1a1a;
       letter-spacing: -0.5px;
     }
-    
+
     .nav-links {
       display: flex;
       gap: 1.5rem;
       align-items: center;
     }
-    
+
     .nav-links a {
       color: #666;
       text-decoration: none;
@@ -43,17 +48,17 @@
       font-weight: 500;
       transition: color 0.2s;
     }
-    
+
     .nav-links a:hover {
       color: #1a1a1a;
     }
-    
+
     .container {
       max-width: 900px;
       margin: 2rem auto;
       padding: 0 2rem;
     }
-    
+
     .card {
       background: #ffffff;
       border: 1px solid #e5e5e5;
@@ -61,13 +66,13 @@
       padding: 2rem;
       margin-bottom: 1.5rem;
     }
-    
+
     .header-section {
       border-bottom: 1px solid #e5e5e5;
       padding-bottom: 1.5rem;
       margin-bottom: 1.5rem;
     }
-    
+
     .subject {
       font-size: 1.5rem;
       font-weight: 600;
@@ -75,7 +80,7 @@
       margin-bottom: 1rem;
       line-height: 1.3;
     }
-    
+
     .meta {
       display: flex;
       gap: 2rem;
@@ -84,25 +89,25 @@
       font-size: 0.875rem;
       margin-bottom: 1rem;
     }
-    
+
     .meta-item {
       display: flex;
       align-items: center;
       gap: 0.5rem;
     }
-    
+
     .meta-item strong {
       color: #1a1a1a;
       font-weight: 600;
     }
-    
+
     .badges {
       display: flex;
       gap: 0.5rem;
       flex-wrap: wrap;
       margin-top: 1rem;
     }
-    
+
     .badge {
       padding: 0.375rem 0.75rem;
       border-radius: 4px;
@@ -111,49 +116,49 @@
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
-    
+
     .badge-priority-HIGH {
       background: #fee;
       color: #c33;
       border: 1px solid #fcc;
     }
-    
+
     .badge-priority-MEDIUM {
       background: #fff8e1;
       color: #f57c00;
       border: 1px solid #ffe0b2;
     }
-    
+
     .badge-priority-LOW {
       background: #f1f8e9;
       color: #388e3c;
       border: 1px solid #c8e6c9;
     }
-    
+
     .badge-sentiment-positive {
       background: #f1f8e9;
       color: #388e3c;
       border: 1px solid #c8e6c9;
     }
-    
+
     .badge-sentiment-negative {
       background: #fee;
       color: #c33;
       border: 1px solid #fcc;
     }
-    
+
     .badge-sentiment-neutral {
       background: #f5f5f5;
       color: #666;
       border: 1px solid #e0e0e0;
     }
-    
+
     .badge-category {
       background: #e3f2fd;
       color: #1976d2;
       border: 1px solid #bbdefb;
     }
-    
+
     .section-title {
       font-size: 1rem;
       font-weight: 600;
@@ -163,7 +168,7 @@
       letter-spacing: 0.5px;
       font-size: 0.75rem;
     }
-    
+
     .summary-box {
       background: #fafafa;
       padding: 1.25rem;
@@ -174,7 +179,7 @@
       font-size: 0.9rem;
       color: #333;
     }
-    
+
     .body-box {
       background: #fafafa;
       padding: 1.25rem;
@@ -186,20 +191,20 @@
       font-size: 0.9rem;
       color: #333;
     }
-    
+
     .info-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
       gap: 1rem;
     }
-    
+
     .info-item {
       background: #fafafa;
       padding: 1rem;
       border-radius: 6px;
       border: 1px solid #e5e5e5;
     }
-    
+
     .info-item strong {
       display: block;
       color: #1a1a1a;
@@ -209,22 +214,22 @@
       letter-spacing: 0.5px;
       font-weight: 600;
     }
-    
+
     .info-item ul {
       margin-left: 1.25rem;
       color: #666;
       font-size: 0.875rem;
     }
-    
+
     .reply-section {
       background: #ffffff;
       border: 1px solid #e5e5e5;
     }
-    
+
     .form-group {
       margin-bottom: 1.25rem;
     }
-    
+
     label {
       display: block;
       margin-bottom: 0.5rem;
@@ -232,8 +237,9 @@
       color: #1a1a1a;
       font-size: 0.875rem;
     }
-    
-    select, textarea {
+
+    select,
+    textarea {
       width: 100%;
       padding: 0.75rem;
       border: 1px solid #e5e5e5;
@@ -243,23 +249,24 @@
       transition: border-color 0.2s;
       background: #fff;
     }
-    
-    select:focus, textarea:focus {
+
+    select:focus,
+    textarea:focus {
       outline: none;
       border-color: #1a1a1a;
     }
-    
+
     textarea {
       resize: vertical;
       min-height: 120px;
     }
-    
+
     .btn-group {
       display: flex;
       gap: 0.75rem;
       margin-top: 1rem;
     }
-    
+
     .btn {
       padding: 0.75rem 1.5rem;
       border: 1px solid #e5e5e5;
@@ -272,61 +279,61 @@
       letter-spacing: 0.5px;
       font-size: 0.75rem;
     }
-    
+
     .btn-primary {
       background: #1a1a1a;
       color: #ffffff;
       border-color: #1a1a1a;
     }
-    
+
     .btn-primary:hover:not(:disabled) {
       background: #333;
       transform: translateY(-1px);
     }
-    
+
     .btn-secondary {
       background: #ffffff;
       color: #1a1a1a;
       border-color: #e5e5e5;
     }
-    
+
     .btn-secondary:hover {
       background: #fafafa;
     }
-    
+
     .btn-success {
       background: #388e3c;
       color: #ffffff;
       border-color: #388e3c;
     }
-    
+
     .btn-success:hover:not(:disabled) {
       background: #2e7d32;
     }
-    
+
     .btn:disabled {
       opacity: 0.5;
       cursor: not-allowed;
       transform: none;
     }
-    
+
     .loading {
       display: none;
       color: #666;
       margin-top: 1rem;
       font-size: 0.875rem;
     }
-    
+
     .loading.show {
       display: block;
     }
-    
+
     .draft-actions {
       display: flex;
       gap: 0.75rem;
       margin-top: 1rem;
     }
-    
+
     .status-message {
       padding: 0.75rem;
       border-radius: 6px;
@@ -334,17 +341,17 @@
       font-size: 0.875rem;
       display: none;
     }
-    
+
     .status-message.show {
       display: block;
     }
-    
+
     .status-success {
       background: #f1f8e9;
       color: #2e7d32;
       border: 1px solid #c8e6c9;
     }
-    
+
     .status-error {
       background: #fee;
       color: #c33;
@@ -352,6 +359,7 @@
     }
   </style>
 </head>
+
 <body>
   <nav class="navbar">
     <h1><a href="{{ url_for('index') }}" style="text-decoration: none; color: inherit;">ODIN</a></h1>
@@ -394,7 +402,8 @@
       </div>
       {% endif %}
 
-      {% if extracted_info and (extracted_info.action_items or extracted_info.dates or extracted_info.emails or extracted_info.phones) %}
+      {% if extracted_info and (extracted_info.action_items or extracted_info.dates or extracted_info.emails or
+      extracted_info.phones) %}
       <div style="margin-bottom: 2rem;">
         <h2 class="section-title">Extracted Information</h2>
         <div class="info-grid">
@@ -440,7 +449,7 @@
 
     <div class="card reply-section">
       <h2 class="section-title">Compose Reply</h2>
-      
+
       <div class="form-group">
         <label for="tone">Tone</label>
         <select id="tone">
@@ -454,15 +463,33 @@
 
       <div class="form-group">
         <label for="instructions">Additional Instructions (optional)</label>
-        <textarea id="instructions" placeholder="e.g., Mention that I'll follow up next week, include pricing details, etc."></textarea>
+        <textarea id="instructions"
+          placeholder="e.g., Mention that I'll follow up next week, include pricing details, etc."></textarea>
       </div>
+
+      <!-- Quick Replies -->
+      {% if quick_replies %}
+      <div style="margin-bottom: 1.5rem;">
+        <label class="form-label" style="display: block; margin-bottom: 0.5rem; color: #666; font-size: 0.9rem;">Quick
+          Replies (AI Suggested):</label>
+        <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+          {% for reply in quick_replies %}
+          <button type="button" onclick="useQuickReply(`{{ reply|replace('`', '\`') }}`)"
+            style="background: #ffffff; border: 1px solid #dadce0; padding: 0.5rem 1.25rem; border-radius: 24px; font-size: 0.875rem; color: #1a73e8; font-weight: 500; cursor: pointer; transition: background-color 0.2s, box-shadow 0.2s; box-shadow: 0 1px 2px rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15);"
+            onmouseover="this.style.backgroundColor='#f1f3f4'" onmouseout="this.style.backgroundColor='#ffffff'">
+            {{ reply }}
+          </button>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
 
       <div class="btn-group">
         <button class="btn btn-primary" id="generateBtn" onclick="generateReply()">
           Generate Reply
         </button>
       </div>
-      
+
       <div class="loading" id="loading">Generating your reply...</div>
 
       <div class="form-group" style="margin-top: 1.5rem;">
@@ -525,6 +552,21 @@
       }, 3000);
     }
 
+    // Quick Reply Handler
+    function useQuickReply(text) {
+      const replyBox = document.getElementById('draft'); // Target the main reply draft textarea
+      if (replyBox) {
+        replyBox.value = text;
+        replyBox.scrollIntoView({ behavior: "smooth" });
+        replyBox.focus();
+        // Also ensure draft actions are visible if a quick reply is used
+        document.getElementById('draftActions').style.display = 'flex';
+        saveDraft(); // Auto-save the quick reply
+      } else {
+        console.error("Reply draft text area not found");
+      }
+    }
+
     // Generate reply
     async function generateReply() {
       const tone = document.getElementById('tone').value;
@@ -552,7 +594,7 @@
         });
 
         const data = await response.json();
-        
+
         if (data.error) {
           showStatus('Error: ' + data.error, 'error');
           draft.value = 'Error: ' + data.error;
@@ -577,7 +619,7 @@
     async function sendReply() {
       const draft = document.getElementById('draft').value;
       const sendBtn = document.getElementById('sendBtn');
-      
+
       if (!draft.trim()) {
         showStatus('Please generate or write a reply first', 'error');
         return;
@@ -604,7 +646,7 @@
         });
 
         const data = await response.json();
-        
+
         if (data.error) {
           showStatus('Error: ' + data.error, 'error');
         } else {
@@ -623,7 +665,7 @@
     }
 
     // Auto-save draft as user types
-    document.getElementById('draft').addEventListener('input', function() {
+    document.getElementById('draft').addEventListener('input', function () {
       const draft = this.value;
       if (draft.trim()) {
         localStorage.setItem('email_draft_{{ id }}', draft);
@@ -632,7 +674,7 @@
     });
 
     // Load saved draft on page load
-    window.addEventListener('DOMContentLoaded', function() {
+    window.addEventListener('DOMContentLoaded', function () {
       loadDraft();
       const draft = document.getElementById('draft').value;
       if (draft.trim()) {
@@ -641,4 +683,5 @@
     });
   </script>
 </body>
+
 </html>
