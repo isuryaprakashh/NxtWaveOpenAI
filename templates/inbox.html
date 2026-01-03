@@ -229,6 +229,66 @@
       color: #388e3c;
     }
 
+    .label-tag {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      font-weight: 500;
+      margin-left: 0.5rem;
+      vertical-align: middle;
+      text-transform: lowercase;
+    }
+
+    .label-tag-spam {
+      border: 1px solid #a16207;
+      color: #a16207;
+      background: transparent;
+    }
+
+    .label-tag-inbox {
+      border: 1px solid #16a34a;
+      color: #16a34a;
+      background: transparent;
+    }
+
+    .attachment-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-size: 0.75rem;
+      color: #666;
+      margin-left: 0.75rem;
+    }
+
+    .attachment-indicator svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .attachment-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+
+    .attachment-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      padding: 0.25rem 0.5rem;
+      background: #f0f0f0;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      color: #555;
+    }
+
+    .attachment-chip svg {
+      width: 12px;
+      height: 12px;
+    }
+
     .loading {
       text-align: center;
       padding: 3rem;
@@ -362,17 +422,40 @@
               onclick="event.stopPropagation(); updateSelectedCount();">
             <div class="email-content">
               <div class="email-header">
-                <span class="email-from">{{ mail.from }}</span>
+                <span class="email-from">
+                  {{ mail.from }}
+                  {% if mail.is_spam %}
+                  <span class="label-tag label-tag-spam">spam</span>
+                  {% else %}
+                  <span class="label-tag label-tag-inbox">inbox</span>
+                  {% endif %}
+                  {% if mail.has_attachments %}
+                  <span class="attachment-indicator">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                    </svg>
+                    {{ mail.attachments|length }}
+                  </span>
+                  {% endif %}
+                </span>
                 <span class="email-date">{{ mail.date }}</span>
               </div>
-              <h3 class="email-subject">
-                {{ mail.subject }}
-                {% if mail.is_spam %}
-                <span
-                  style="background: #ef4444; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; margin-left: 8px;">SPAM</span>
-                {% endif %}
-              </h3>
+              <h3 class="email-subject">{{ mail.subject }}</h3>
               <p class="email-snippet">{{ mail.snippet }}</p>
+              {% if mail.has_attachments %}
+              <div class="attachment-list">
+                {% for att in mail.attachments %}
+                <span class="attachment-chip">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  {{ att.filename[:30] }}{% if att.filename|length > 30 %}...{% endif %}
+                </span>
+                {% endfor %}
+              </div>
+              {% endif %}
             </div>
           </div>
           {% endfor %}

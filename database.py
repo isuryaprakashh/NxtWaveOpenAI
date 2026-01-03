@@ -290,5 +290,36 @@ def get_email_by_id(email_id: str, user_id: Optional[str] = None) -> Optional[Di
     return None
 
 
+def delete_email_by_id(email_id: str, user_id: Optional[str] = None) -> bool:
+    """
+    Delete email data from database.
+    
+    Args:
+        email_id: The email's unique identifier
+        user_id: Optional user_id for access control
+        
+    Returns:
+        True if deleted successfully, False otherwise
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        if user_id:
+            cursor.execute('DELETE FROM emails WHERE id = ? AND user_id = ?', (email_id, user_id))
+            cursor.execute('DELETE FROM extracted_info WHERE email_id = ?', (email_id,))
+        else:
+            cursor.execute('DELETE FROM emails WHERE id = ?', (email_id,))
+            cursor.execute('DELETE FROM extracted_info WHERE email_id = ?', (email_id,))
+        
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        print(f"Error deleting email: {e}")
+        return False
+    finally:
+        conn.close()
+
+
 # Initialize database on import
 init_db()

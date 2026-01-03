@@ -22,7 +22,7 @@ from openai_helpers import (
     analyze_email_comprehensive, 
     generate_reply,
 )
-from database import save_email_analysis, get_analytics, get_email_by_id, search_emails
+from database import save_email_analysis, get_analytics, get_email_by_id, search_emails, delete_email_by_id
 
 # Load environment variables
 load_dotenv()
@@ -234,33 +234,39 @@ def parse_message_payload(payload: Dict) -> Tuple[str, str]:
 
 
 def _clean_email_body(body_text: str) -> str:
-    """Remove quoted replies and forwarded headers from email body."""
-    split_patterns = [
-        r'On\s+.*,\s+.*wrote:',
-        r'-+\s*Forwarded message\s*-+',
-        r'From:\s+.*',
-        r'_{20,}',
-    ]
-    
+    """
+    Clean email body while preserving forwarded content.
+    Only removes actual quoted lines (starting with >) and excessive signatures.
+    """
     lines = body_text.splitlines()
     clean_lines = []
+    consecutive_empty = 0
     
     for line in lines:
-        line = line.strip()
+        stripped = line.strip()
         
-        # Check if line marks start of quote
-        is_quote_start = any(re.match(pattern, line, re.IGNORECASE) for pattern in split_patterns)
-        
-        if is_quote_start:
-            break
-            
-        # Skip lines that look like quoted text
-        if line.startswith(">"):
+        # Skip lines that are quoted replies (starting with >)
+        if stripped.startswith(">"):
             continue
-            
-        clean_lines.append(line)
         
-    return "\n".join(clean_lines).strip()
+        # Track consecutive empty lines to avoid excessive whitespace
+        if not stripped:
+            consecutive_empty += 1
+            if consecutive_empty <= 2:
+                clean_lines.append("")
+            continue
+        else:
+            consecutive_empty = 0
+        
+        clean_lines.append(line)
+    
+    result = "\n".join(clean_lines).strip()
+    
+    # If result is too short (likely just a signature), return original
+    if len(result) < 50 and len(body_text) > 100:
+        return body_text.strip()
+    
+    return result
 
 
 # ============ API Routes ============
@@ -273,12 +279,22 @@ def api_get_message(message_id: str):
     if not creds:
         return jsonify({"error": "not authenticated"}), 401
     
-    # Check if already in database
-    cached = get_email_by_id(message_id, uid)
-    if cached:
-        if "quick_replies" not in cached:
-            cached["quick_replies"] = []
-        return jsonify(cached)
+    # Check for refresh parameter to force re-fetch
+    refresh = request.args.get("refresh", "0") == "1"
+    if refresh:
+        delete_email_by_id(message_id, uid)
+    
+    # Check if already in database (skip if refresh requested)
+    if not refresh:
+        cached = get_email_by_id(message_id, uid)
+        if cached:
+            if "quick_replies" not in cached:
+                cached["quick_replies"] = []
+            if "attachments" not in cached:
+                cached["attachments"] = []
+            if "has_attachments" not in cached:
+                cached["has_attachments"] = len(cached.get("attachments", [])) > 0
+            return jsonify(cached)
     
     service = build_gmail_service(creds)
     try:
@@ -307,6 +323,25 @@ def api_get_message(message_id: str):
         if "phones" not in extracted_info:
             extracted_info["phones"] = list(set(PHONE_PATTERN.findall(text)))
         
+        # Extract attachments
+        attachments = []
+        def find_attachments(part):
+            """Recursively find attachments in message parts."""
+            filename = part.get("filename", "")
+            if filename:
+                body_data = part.get("body", {})
+                attachments.append({
+                    "filename": filename,
+                    "mimeType": part.get("mimeType", ""),
+                    "size": body_data.get("size", 0),
+                    "attachmentId": body_data.get("attachmentId", "")
+                })
+            for subpart in part.get("parts", []):
+                find_attachments(subpart)
+        
+        payload = msg.get("payload", {})
+        find_attachments(payload)
+        
         email_data = {
             "id": message_id,
             "user_id": uid,
@@ -322,12 +357,53 @@ def api_get_message(message_id: str):
             "sentiment_score": ai_result.get("sentiment", {}).get("score", 0.5),
             "category": category,
             "extracted_info": extracted_info,
-            "quick_replies": ai_result.get("quick_replies", [])
+            "quick_replies": ai_result.get("quick_replies", []),
+            "attachments": attachments,
+            "has_attachments": len(attachments) > 0
         }
         
         save_email_analysis(email_data)
         
         return jsonify(email_data)
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/attachment/<message_id>/<attachment_id>")
+def api_get_attachment(message_id: str, attachment_id: str):
+    """Download an attachment from a Gmail message."""
+    uid = session.get("user_id")
+    creds = load_credentials(uid)
+    if not creds:
+        return jsonify({"error": "not authenticated"}), 401
+    
+    service = build_gmail_service(creds)
+    try:
+        # Get the attachment data
+        attachment = service.users().messages().attachments().get(
+            userId="me", 
+            messageId=message_id, 
+            id=attachment_id
+        ).execute()
+        
+        data = attachment.get("data", "")
+        if not data:
+            return jsonify({"error": "No attachment data"}), 404
+        
+        # Decode the attachment
+        file_data = urlsafe_b64decode(data + "===")
+        
+        # Get filename from query param
+        filename = request.args.get("filename", "attachment")
+        mime_type = request.args.get("mimeType", "application/octet-stream")
+        
+        # Return the file
+        from flask import Response
+        response = Response(file_data, mimetype=mime_type)
+        response.headers["Content-Disposition"] = f'inline; filename="{filename}"'
+        return response
+        
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
@@ -541,11 +617,28 @@ def inbox():
 
         for m in msg_list:
             msg = service.users().messages().get(
-                userId="me", id=m["id"], format="metadata", 
-                metadataHeaders=["From", "Subject", "Date"]
+                userId="me", id=m["id"], format="full"
             ).execute()
             headers = {h["name"]: h["value"] for h in msg.get("payload", {}).get("headers", [])}
             labels = msg.get("labelIds", [])
+            
+            # Extract attachments
+            attachments = []
+            def find_attachments(part):
+                """Recursively find attachments in message parts."""
+                filename = part.get("filename", "")
+                if filename:
+                    attachments.append({
+                        "filename": filename,
+                        "mimeType": part.get("mimeType", ""),
+                        "size": part.get("body", {}).get("size", 0),
+                        "attachmentId": part.get("body", {}).get("attachmentId", "")
+                    })
+                for subpart in part.get("parts", []):
+                    find_attachments(subpart)
+            
+            payload = msg.get("payload", {})
+            find_attachments(payload)
             
             messages.append({
                 "id": m["id"],
@@ -554,7 +647,9 @@ def inbox():
                 "subject": headers.get("Subject", "(No subject)"),
                 "date": headers.get("Date", "(No date)"),
                 "is_spam": "SPAM" in labels,
-                "labels": labels
+                "labels": labels,
+                "attachments": attachments,
+                "has_attachments": len(attachments) > 0
             })
 
         if not messages:
@@ -576,13 +671,19 @@ def message_detail(message_id: str):
     creds = load_credentials(uid)
     if not creds:
         return redirect(url_for("index"))
-
+    
+    # Check for refresh parameter
+    refresh = request.args.get("refresh", "0") == "1"
+    if refresh:
+        delete_email_by_id(message_id, uid)
+    
     response = api_get_message(message_id)
     if isinstance(response, tuple):
         flash("Error loading message", "danger")
         return redirect(url_for("inbox"))
     
     data = response.get_json()
+    data["message_id"] = message_id  # Pass message_id for refresh button
     return render_template("message.html", **data)
 
 
