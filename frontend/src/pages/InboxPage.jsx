@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
-import { fetchInbox, fetchMessage } from "../services/api";
+import ComposeModal from "../components/ComposeModal";
+import { fetchInbox, fetchMessage, checkInbox } from "../services/api";
 
 export default function Inbox() {
     const navigate = useNavigate();
@@ -13,6 +14,10 @@ export default function Inbox() {
     const [showDetail, setShowDetail] = useState(false);
     const [loading, setLoading] = useState(false);
     const [initialLoading, setInitialLoading] = useState(true);
+    const [composeOpen, setComposeOpen] = useState(false);
+    const [newEmailCount, setNewEmailCount] = useState(0);
+    const [lastEmailId, setLastEmailId] = useState(null);
+
 
     // Load emails from API on mount
     useEffect(() => {
@@ -21,11 +26,31 @@ export default function Inbox() {
         if (cached) {
             setEmails(JSON.parse(cached));
             setInitialLoading(false);
-            // We rely on manual refresh for updates as per user preference to avoid "time taking" auto-fetches
+            // Track last email ID for polling
+            const parsedCache = JSON.parse(cached);
+            if (parsedCache.length > 0) {
+                setLastEmailId(parsedCache[0].id);
+            }
         } else {
             loadEmails();
         }
     }, []);
+
+    // Polling for new emails every 30 seconds
+    useEffect(() => {
+        const pollInterval = setInterval(async () => {
+            try {
+                const result = await checkInbox();
+                if (result.latest_id && lastEmailId && result.latest_id !== lastEmailId) {
+                    setNewEmailCount(prev => prev + 1);
+                }
+            } catch (err) {
+                console.log('Polling check failed:', err);
+            }
+        }, 30000); // 30 seconds
+
+        return () => clearInterval(pollInterval);
+    }, [lastEmailId]);
 
     const loadEmails = async (isRefresh = false) => {
         if (!isRefresh) setInitialLoading(true);
@@ -226,14 +251,14 @@ export default function Inbox() {
 
                                                 <div className="flex gap-3 mb-4 flex-wrap">
                                                     <span className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide border ${d.priority === 'HIGH' ? 'bg-red-50 text-red-700 border-red-200' :
-                                                            d.priority === 'LOW' ? 'bg-green-50 text-green-700 border-green-200' :
-                                                                'bg-amber-50 text-amber-700 border-amber-200'
+                                                        d.priority === 'LOW' ? 'bg-green-50 text-green-700 border-green-200' :
+                                                            'bg-amber-50 text-amber-700 border-amber-200'
                                                         }`}>
                                                         {d.priority || 'Medium'}
                                                     </span>
                                                     <span className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide border ${d.sentiment === 'positive' ? 'bg-green-50 text-green-700 border-green-200' :
-                                                            d.sentiment === 'negative' ? 'bg-red-50 text-red-700 border-red-200' :
-                                                                'bg-gray-50 text-gray-700 border-gray-200'
+                                                        d.sentiment === 'negative' ? 'bg-red-50 text-red-700 border-red-200' :
+                                                            'bg-gray-50 text-gray-700 border-gray-200'
                                                         }`}>
                                                         {d.sentiment || 'Neutral'}
                                                     </span>
@@ -267,6 +292,35 @@ export default function Inbox() {
                     </div>
                 )}
             </div>
+
+            {/* Floating Compose Button (FAB) */}
+            <button
+                onClick={() => setComposeOpen(true)}
+                className="fixed bottom-6 right-6 z-50 w-14 h-14 bg-black text-white rounded-full shadow-xl hover:bg-gray-800 transition-all hover:scale-110 flex items-center justify-center"
+                title="Compose new email"
+            >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+            </button>
+
+            {/* New Email Notification Badge */}
+            {newEmailCount > 0 && (
+                <div
+                    className="fixed top-20 right-6 z-50 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 animate-fade-in cursor-pointer"
+                    onClick={() => {
+                        setNewEmailCount(0);
+                        loadEmails(true);
+                    }}
+                >
+                    <span>📬</span>
+                    <span className="font-medium">{newEmailCount} new email{newEmailCount > 1 ? 's' : ''}</span>
+                    <span className="text-blue-200">Click to refresh</span>
+                </div>
+            )}
+
+            {/* Compose Modal */}
+            <ComposeModal isOpen={composeOpen} onClose={() => setComposeOpen(false)} />
         </div>
     );
 }

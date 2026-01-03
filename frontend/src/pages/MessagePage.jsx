@@ -13,6 +13,7 @@ export default function MessagePage() {
     const [instructions, setInstructions] = useState("");
     const [draft, setDraft] = useState("");
     const [loading, setLoading] = useState(false);
+    const [sending, setSending] = useState(false);
     const [status, setStatus] = useState(null);
 
     // Fetch mail
@@ -51,34 +52,20 @@ export default function MessagePage() {
         if (!draft.trim()) return;
         if (!window.confirm("Send this reply?")) return;
 
+        setSending(true);
         try {
-            // Use API service
-            // Note: User's code sent { reply_text: draft }
-            // My API service signature is sendReply(id, replyText, to, subject)
-            // I should check if I need 'to' and 'subject'. The backend handles it?
-            // Step 375 api.js had `sendReply: (id, replyText)`.
-            // Step 475 api.js update had `sendReply(id, replyText, to, subject)`.
-            // I should extract 'to' and 'subject' from 'mail' state.
-
-            const to = mail.headers?.['Reply-To'] || mail.from; // Simplified logic
+            const to = mail.headers?.['Reply-To'] || mail.from;
             const subject = mail.subject;
-
-            // Ensure API service matches backend expectation.
-            // Flask /send_reply/<message_id> expects 'reply_text'. ('to' and 'subject' might be optional or inferred if backend logic exists, but let's pass them if api service demands)
-            // Actually backend `app.py` /send_reply implementation:
-            // data = request.json; reply_text = data.get('reply_text')
-            // It creates draft/sends using Gmail API.
-            // Let's pass what we have.
-
             const data = await apiSendReply(id, draft, to, subject);
 
             if (data.error) throw new Error(data.error);
             localStorage.removeItem(`email_draft_${id}`);
-            setStatus({ type: "success", msg: "Reply sent successfully" });
-
-            // Navigate back after delay? User code didn't have it, so I'll leave it out to match "theme".
+            setDraft('');
+            setStatus({ type: "success", msg: "Reply sent successfully!" });
         } catch (e) {
             setStatus({ type: "error", msg: e.message });
+        } finally {
+            setSending(false);
         }
     };
 
@@ -134,9 +121,39 @@ export default function MessagePage() {
 
                     {mail.body && (
                         <Section title="Email Body">
-                            <div className="max-h-96 overflow-y-auto rounded-lg bg-gray-50 p-4 text-sm whitespace-pre-wrap border border-gray-100 text-gray-800">
-                                {mail.body}
-                            </div>
+                            {/* Check if body contains HTML tags */}
+                            {mail.body.includes('<') && mail.body.includes('>') ? (
+                                <iframe
+                                    title="Email Content"
+                                    srcDoc={mail.body}
+                                    className="w-full rounded-lg border border-gray-100 bg-white"
+                                    style={{ minHeight: '400px', height: 'auto' }}
+                                    sandbox="allow-same-origin"
+                                    onLoad={(e) => {
+                                        // Auto-resize iframe to fit content
+                                        const iframe = e.target;
+                                        try {
+                                            const height = iframe.contentWindow.document.body.scrollHeight;
+                                            iframe.style.height = Math.min(Math.max(height + 40, 200), 600) + 'px';
+                                        } catch (err) {
+                                            iframe.style.height = '400px';
+                                        }
+                                    }}
+                                />
+                            ) : (
+                                <div className="max-h-[500px] overflow-y-auto rounded-lg bg-white p-6 text-sm leading-relaxed border border-gray-200 text-gray-800 shadow-inner">
+                                    {mail.body.split('\n\n').map((paragraph, i) => (
+                                        <p key={i} className="mb-4 last:mb-0">
+                                            {paragraph.split('\n').map((line, j) => (
+                                                <span key={j}>
+                                                    {line}
+                                                    {j < paragraph.split('\n').length - 1 && <br />}
+                                                </span>
+                                            ))}
+                                        </p>
+                                    ))}
+                                </div>
+                            )}
                         </Section>
                     )}
 
@@ -216,8 +233,20 @@ export default function MessagePage() {
 
                     {draft.trim() && (
                         <div className="mt-6 flex gap-3">
-                            <button onClick={handleSendReply} className="rounded-lg bg-green-600 px-8 py-2.5 text-sm font-semibold text-white hover:bg-green-700 transition-colors shadow-sm">
-                                Send Reply
+                            <button
+                                onClick={handleSendReply}
+                                disabled={sending}
+                                className="rounded-lg bg-green-600 px-8 py-2.5 text-sm font-semibold text-white hover:bg-green-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                            >
+                                {sending ? (
+                                    <>
+                                        <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                        </svg>
+                                        Sending...
+                                    </>
+                                ) : 'Send Reply'}
                             </button>
                             <button onClick={() => setDraft("")} className="rounded-lg border border-gray-300 px-6 py-2.5 text-sm font-medium hover:bg-gray-50 transition-colors">
                                 Clear

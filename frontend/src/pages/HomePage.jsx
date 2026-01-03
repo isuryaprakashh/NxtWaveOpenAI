@@ -1,15 +1,33 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { checkAuth } from "../services/api";
 
 export default function OdinLanding() {
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+    useEffect(() => {
+        // Check if user is already signed in
+        checkAuth().then(data => {
+            setIsAuthenticated(data.authenticated || false);
+        });
+    }, []);
+
     return (
         <div className="font-sans text-[#1a1a1a] bg-white">
-            {/* Navigation */}
+            {/* Navigation - Shows different button based on auth status */}
             <nav className="sticky top-0 z-50 flex items-center justify-between border-b border-gray-200 bg-white px-8 py-4">
                 <h1 className="text-xl font-bold tracking-tight">ODIN</h1>
                 <div className="flex items-center gap-6">
                     <a href="#features" className="text-sm font-medium text-gray-500 hover:text-black">Features</a>
                     <a href="#how-it-works" className="text-sm font-medium text-gray-500 hover:text-black">How It Works</a>
-                    <a href="/login" className="rounded-md bg-black px-5 py-2 text-sm font-semibold text-white hover:bg-gray-800">Sign In</a>
+                    {isAuthenticated ? (
+                        <a href="/inbox" className="rounded-md bg-black px-5 py-2 text-sm font-semibold text-white hover:bg-gray-800">
+                            Go to Inbox
+                        </a>
+                    ) : (
+                        <a href="/login" className="rounded-md bg-black px-5 py-2 text-sm font-semibold text-white hover:bg-gray-800">
+                            Sign In
+                        </a>
+                    )}
                 </div>
             </nav>
 
@@ -22,7 +40,15 @@ export default function OdinLanding() {
                         Transform your inbox into a strategic command center. ODIN uses advanced AI to analyze, prioritize, and respond to your emails with unmatched intelligence and speed.
                     </p>
                     <div className="flex flex-wrap justify-center gap-4">
-                        <a href="/login" className="rounded-lg bg-black px-10 py-4 text-sm font-semibold uppercase tracking-wide text-white hover:bg-gray-800">Get Started</a>
+                        {isAuthenticated ? (
+                            <a href="/inbox" className="rounded-lg bg-black px-10 py-4 text-sm font-semibold uppercase tracking-wide text-white hover:bg-gray-800">
+                                Open Inbox
+                            </a>
+                        ) : (
+                            <a href="/login" className="rounded-lg bg-black px-10 py-4 text-sm font-semibold uppercase tracking-wide text-white hover:bg-gray-800">
+                                Get Started
+                            </a>
+                        )}
                         <a href="#features" className="rounded-lg border border-gray-300 px-10 py-4 text-sm font-semibold uppercase tracking-wide hover:border-black">Learn More</a>
                     </div>
                 </div>
@@ -96,7 +122,15 @@ export default function OdinLanding() {
             <section className="border-t border-gray-200 bg-gray-50 px-6 py-24 text-center">
                 <h2 className="mb-4 text-4xl font-bold tracking-tight">Ready to Transform Your Inbox?</h2>
                 <p className="mx-auto mb-10 max-w-xl text-lg text-gray-500">Join ODIN and experience the future of email management.</p>
-                <a href="/login" className="rounded-lg bg-black px-12 py-4 text-sm font-semibold uppercase tracking-wide text-white hover:bg-gray-800">Start Using ODIN</a>
+                {isAuthenticated ? (
+                    <a href="/inbox" className="rounded-lg bg-black px-12 py-4 text-sm font-semibold uppercase tracking-wide text-white hover:bg-gray-800">
+                        Open Your Inbox
+                    </a>
+                ) : (
+                    <a href="/login" className="rounded-lg bg-black px-12 py-4 text-sm font-semibold uppercase tracking-wide text-white hover:bg-gray-800">
+                        Start Using ODIN
+                    </a>
+                )}
             </section>
 
             {/* Footer */}

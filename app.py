@@ -222,9 +222,20 @@ def parse_message_payload(payload: Dict) -> Tuple[str, str]:
     if plain_body.strip():
         body_text = plain_body
     elif html_body.strip():
-        # Strip HTML tags
-        clean_text = re.sub(r'<[^>]+>', ' ', html_body)
-        body_text = re.sub(r'\s+', ' ', clean_text).strip()
+        # Remove style and script blocks entirely (including content)
+        clean_html = re.sub(r'<style[^>]*>.*?</style>', '', html_body, flags=re.DOTALL | re.IGNORECASE)
+        clean_html = re.sub(r'<script[^>]*>.*?</script>', '', clean_html, flags=re.DOTALL | re.IGNORECASE)
+        # Remove comments
+        clean_html = re.sub(r'<!--.*?-->', '', clean_html, flags=re.DOTALL)
+        # Convert block elements to newlines for paragraph structure
+        clean_html = re.sub(r'</?(p|div|br|h[1-6]|li|tr)[^>]*>', '\n', clean_html, flags=re.IGNORECASE)
+        # Now strip remaining HTML tags
+        clean_text = re.sub(r'<[^>]+>', ' ', clean_html)
+        # Clean up multiple spaces on same line, but preserve newlines
+        clean_text = re.sub(r'[^\S\n]+', ' ', clean_text)
+        # Clean up multiple consecutive newlines (keep max 2)
+        clean_text = re.sub(r'\n{3,}', '\n\n', clean_text)
+        body_text = clean_text.strip()
     else:
         body_text = snippet
 
@@ -747,11 +758,86 @@ def send_reply_endpoint(message_id: str):
         return jsonify({
             "success": True,
             "message_id": send_message.get("id"),
-            "message": "Reply sent successfully"
+            "message": "Email sent successfully!"
         })
     except Exception as e:
         traceback.print_exc()
-        return jsonify({"error": f"Failed to send reply: {str(e)}"}), 500
+        return jsonify({"error": f"Failed to send email: {str(e)}"}), 500
+
+
+@app.route("/api/compose", methods=["POST"])
+def api_compose():
+    """Compose and send a new email."""
+    uid = session.get("user_id")
+    creds = load_credentials(uid)
+    if not creds:
+        return jsonify({"error": "not authenticated"}), 401
+
+    try:
+        service = build_gmail_service(creds)
+        
+        data = request.json or {}
+        to = data.get("to", "")
+        subject = data.get("subject", "")
+        body = data.get("body", "")
+        
+        if not to:
+            return jsonify({"error": "Recipient (to) is required"}), 400
+        if not subject:
+            return jsonify({"error": "Subject is required"}), 400
+        if not body:
+            return jsonify({"error": "Email body is required"}), 400
+        
+        # Create message
+        message_obj = MIMEText(body)
+        message_obj['To'] = to
+        message_obj['Subject'] = subject
+        
+        raw_message = urlsafe_b64encode(message_obj.as_bytes()).decode('utf-8')
+        
+        send_message = service.users().messages().send(
+            userId="me",
+            body={'raw': raw_message}
+        ).execute()
+        
+        return jsonify({
+            "success": True,
+            "message_id": send_message.get("id"),
+            "message": "Email sent successfully!"
+        })
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": f"Failed to send email: {str(e)}"}), 500
+
+
+@app.route("/api/inbox/check")
+def api_inbox_check():
+    """Quick check for new emails - returns count and latest ID for polling."""
+    uid = session.get("user_id")
+    creds = load_credentials(uid)
+    if not creds:
+        return jsonify({"error": "not authenticated"}), 401
+
+    try:
+        service = build_gmail_service(creds)
+        results = service.users().messages().list(
+            userId="me",
+            maxResults=1,
+            labelIds=["INBOX"]
+        ).execute()
+        
+        messages = results.get("messages", [])
+        latest_id = messages[0]["id"] if messages else None
+        total = results.get("resultSizeEstimate", 0)
+        
+        return jsonify({
+            "latest_id": latest_id,
+            "total": total,
+            "timestamp": int(os.popen('echo %time%').read().strip().replace(':', '').replace('.', '')[:6]) if os.name == 'nt' else int(__import__('time').time())
+        })
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
 
 
 # ============ Health Check ============

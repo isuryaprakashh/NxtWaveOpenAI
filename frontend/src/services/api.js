@@ -63,3 +63,13 @@ export const sendChatQuery = (question) =>
         body: JSON.stringify({ question }),
     });
 
+// Compose Email API
+export const composeEmail = (to, subject, body) =>
+    fetchJSON('/api/compose', {
+        method: 'POST',
+        body: JSON.stringify({ to, subject, body }),
+    });
+
+// Inbox Check API (for polling)
+export const checkInbox = () => fetchJSON('/api/inbox/check');
+

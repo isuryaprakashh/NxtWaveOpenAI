@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Navbar from '../components/Navbar';
 import Button from '../components/Button';
 import { sendChatQuery } from '../services/api';
@@ -7,7 +7,12 @@ export default function ChatPage() {
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
+    const messagesEndRef = useRef(null);
 
+    // Auto-scroll to bottom when new messages arrive
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [messages]);
     async function handleSubmit(e) {
         e.preventDefault();
         if (!input.trim() || loading) return;
@@ -67,10 +72,17 @@ export default function ChatPage() {
                                         <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
                                         {msg.sources?.length > 0 && (
                                             <div className="mt-2 pt-2 border-t border-gray-200">
-                                                <p className="text-xs text-gray-500">Sources:</p>
-                                                <ul className="text-xs text-gray-600">
+                                                <p className="text-xs text-gray-500 mb-1">Sources:</p>
+                                                <ul className="text-xs text-gray-600 space-y-0.5">
                                                     {msg.sources.map((src, j) => (
-                                                        <li key={j}>• {src.subject || src}</li>
+                                                        <li key={j}>
+                                                            <a
+                                                                href={`/message/${src.id}`}
+                                                                className="text-blue-600 hover:underline"
+                                                            >
+                                                                • {src.subject || src}
+                                                            </a>
+                                                        </li>
                                                     ))}
                                                 </ul>
                                             </div>
@@ -90,6 +102,8 @@ export default function ChatPage() {
                                 </div>
                             </div>
                         )}
+                        {/* Scroll anchor for auto-scroll */}
+                        <div ref={messagesEndRef} />
                     </div>
 
                     {/* Input */}
@@ -98,7 +112,14 @@ export default function ChatPage() {
                             type="text"
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
-                            placeholder="Ask about your emails..."
+                            onKeyDown={(e) => {
+                                // Cmd+Enter or Ctrl+Enter to send
+                                if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleSubmit(e);
+                                }
+                            }}
+                            placeholder="Ask about your emails... (Ctrl+Enter to send)"
                             className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-gray-200"
                             disabled={loading}
                         />
