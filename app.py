@@ -25,9 +25,6 @@ from openai_helpers import (
 )
 from database import save_email_analysis, get_analytics, get_email_by_id, search_emails, delete_email_by_id
 
-# Load environment variables
-# Load environment variables
-
 # ============ Configuration ============
 DEBUG = os.getenv("FLASK_DEBUG", "true").lower() == "true"
 
@@ -54,7 +51,7 @@ GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 REDIRECT_URI = os.getenv("GOOGLE_OAUTH_REDIRECT_URI", "http://localhost:5000/oauth2callback")
 SCOPES = os.getenv(
     "SCOPES", 
-    "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.modify"
+    "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send"
 ).split()
 
 TOKEN_STORE = Path("./tokens")
@@ -356,7 +353,7 @@ def api_inbox():
 
 @app.route("/api/message/<message_id>")
 def api_get_message(message_id: str):
-    """Return message details as JSON, including all AI analysis."""
+    """Return message details as JSON. Use lazy=1 for instant load without AI."""
     uid = session.get("user_id")
     creds = load_credentials(uid)
     if not creds:
@@ -364,6 +361,8 @@ def api_get_message(message_id: str):
     
     # Check for refresh parameter to force re-fetch
     refresh = request.args.get("refresh", "0") == "1"
+    lazy = request.args.get("lazy", "0") == "1"  # Skip AI for instant load
+    
     if refresh:
         delete_email_by_id(message_id, uid)
     
@@ -388,28 +387,9 @@ def api_get_message(message_id: str):
         subject = headers.get("Subject", "")
         text = body or snippet
         
-        # Run comprehensive AI Analysis
-        ai_result = analyze_email_comprehensive(text, subject)
-        
-        # Auto-Labeling
-        category = ai_result.get("category", "General")
-        if category and category != "General":
-            label_name = f"ODIN/{category}"
-            label_id = ensure_label_exists(service, label_name)
-            if label_id:
-                apply_label(service, message_id, label_id)
-        
-        # Extract regex-based info
-        extracted_info = ai_result.get("extracted_info", {})
-        if "emails" not in extracted_info:
-            extracted_info["emails"] = list(set(EMAIL_PATTERN.findall(text)))
-        if "phones" not in extracted_info:
-            extracted_info["phones"] = list(set(PHONE_PATTERN.findall(text)))
-        
-        # Extract attachments
+        # Extract attachments first (fast)
         attachments = []
         def find_attachments(part):
-            """Recursively find attachments in message parts."""
             filename = part.get("filename", "")
             if filename:
                 body_data = part.get("body", {})
@@ -425,6 +405,7 @@ def api_get_message(message_id: str):
         payload = msg.get("payload", {})
         find_attachments(payload)
         
+        # Base email data (fast - no AI)
         email_data = {
             "id": message_id,
             "user_id": uid,
@@ -434,20 +415,84 @@ def api_get_message(message_id: str):
             "subject": subject,
             "sender": headers.get("From", ""),
             "date": headers.get("Date", ""),
+            "attachments": attachments,
+            "has_attachments": len(attachments) > 0,
+            # AI fields - will be empty if lazy
+            "summary": None,
+            "priority": None,
+            "sentiment": None,
+            "sentiment_score": None,
+            "category": None,
+            "extracted_info": {"emails": list(set(EMAIL_PATTERN.findall(text))), "phones": list(set(PHONE_PATTERN.findall(text)))},
+            "quick_replies": [],
+            "ai_loaded": False
+        }
+        
+        # Skip AI if lazy mode
+        if not lazy:
+            ai_result = analyze_email_comprehensive(text, subject)
+            email_data["summary"] = ai_result.get("summary", "")
+            email_data["priority"] = ai_result.get("priority", "MEDIUM")
+            email_data["sentiment"] = ai_result.get("sentiment", {}).get("sentiment", "neutral")
+            email_data["sentiment_score"] = ai_result.get("sentiment", {}).get("score", 0.5)
+            email_data["category"] = ai_result.get("category", "General")
+            extracted_info = ai_result.get("extracted_info", {})
+            email_data["extracted_info"]["action_items"] = extracted_info.get("action_items", [])
+            email_data["extracted_info"]["dates"] = extracted_info.get("dates", [])
+            email_data["quick_replies"] = ai_result.get("quick_replies", [])
+            email_data["ai_loaded"] = True
+            save_email_analysis(email_data)
+        
+        return jsonify(email_data)
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/message/<message_id>/analyze")
+def api_analyze_message(message_id: str):
+    """Get AI analysis for a message (for lazy loading)."""
+    uid = session.get("user_id")
+    creds = load_credentials(uid)
+    if not creds:
+        return jsonify({"error": "not authenticated"}), 401
+    
+    # Check cache first
+    cached = get_email_by_id(message_id, uid)
+    if cached and cached.get("summary"):
+        return jsonify({
+            "summary": cached.get("summary"),
+            "priority": cached.get("priority"),
+            "sentiment": cached.get("sentiment"),
+            "sentiment_score": cached.get("sentiment_score"),
+            "category": cached.get("category"),
+            "quick_replies": cached.get("quick_replies", []),
+            "extracted_info": cached.get("extracted_info", {}),
+            "ai_loaded": True
+        })
+    
+    service = build_gmail_service(creds)
+    try:
+        msg = service.users().messages().get(userId="me", id=message_id, format="full").execute()
+        snippet, body = parse_message_payload(msg)
+        headers = {h["name"]: h["value"] for h in msg.get("payload", {}).get("headers", [])}
+        
+        subject = headers.get("Subject", "")
+        text = body or snippet
+        
+        # Run AI analysis
+        ai_result = analyze_email_comprehensive(text, subject)
+        
+        return jsonify({
             "summary": ai_result.get("summary", ""),
             "priority": ai_result.get("priority", "MEDIUM"),
             "sentiment": ai_result.get("sentiment", {}).get("sentiment", "neutral"),
             "sentiment_score": ai_result.get("sentiment", {}).get("score", 0.5),
-            "category": category,
-            "extracted_info": extracted_info,
+            "category": ai_result.get("category", "General"),
             "quick_replies": ai_result.get("quick_replies", []),
-            "attachments": attachments,
-            "has_attachments": len(attachments) > 0
-        }
-        
-        save_email_analysis(email_data)
-        
-        return jsonify(email_data)
+            "extracted_info": ai_result.get("extracted_info", {}),
+            "ai_loaded": True
+        })
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
@@ -650,14 +695,36 @@ def oauth2callback():
 
 @app.route("/logout")
 def logout():
-    """Log out and clear session."""
+    """Log out and clear session, including cached data."""
     uid = session.get("user_id")
     if uid:
+        try:
+            # Clear cached emails from DB
+            from database import get_db_connection
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            # Delete extracted info related to this user's emails
+            cursor.execute('''
+                DELETE FROM extracted_info 
+                WHERE email_id IN (SELECT id FROM emails WHERE user_id = ?)
+            ''', (uid,))
+            
+            # Delete the emails themselves
+            cursor.execute('DELETE FROM emails WHERE user_id = ?', (uid,))
+            
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"Error clearing cache on logout: {e}")
+
+        # Delete token file
         p = token_path_for_user(uid)
         try:
             p.unlink()
         except FileNotFoundError:
             pass
+            
     session.clear()
     # Redirect to React frontend
     return redirect("http://localhost:5173")
@@ -830,10 +897,11 @@ def api_inbox_check():
         latest_id = messages[0]["id"] if messages else None
         total = results.get("resultSizeEstimate", 0)
         
+        import time as _time
         return jsonify({
             "latest_id": latest_id,
             "total": total,
-            "timestamp": int(os.popen('echo %time%').read().strip().replace(':', '').replace('.', '')[:6]) if os.name == 'nt' else int(__import__('time').time())
+            "timestamp": int(_time.time())
         })
     except Exception as e:
         traceback.print_exc()

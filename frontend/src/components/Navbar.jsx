@@ -1,87 +1,94 @@
 import { Link, useLocation } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { checkAuth } from '../services/api';
 
 export default function Navbar() {
     const location = useLocation();
-    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const [scrolled, setScrolled] = useState(false);
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+    useEffect(() => {
+        const handleScroll = () => {
+            setScrolled(window.scrollY > 20);
+        };
+        window.addEventListener('scroll', handleScroll);
+        
+        // Check auth status
+        checkAuth().then(data => setIsAuthenticated(data.authenticated || false));
+        
+        return () => window.removeEventListener('scroll', handleScroll);
+    }, []);
 
     const isActive = (path) => location.pathname === path;
 
     const navLinks = [
-        { path: '/inbox', label: 'Inbox' },
-        { path: '/chat', label: 'Chat' },
-        { path: '/analytics', label: 'Analytics' },
+        { path: '/inbox', label: 'INBOX' },
+        { path: '/chat', label: 'CHAT' },
+        { path: '/analytics', label: 'ANALYTICS' },
     ];
 
     return (
-        <nav className="bg-white border-b border-gray-200 px-6 md:px-8 py-4 sticky top-0 z-50">
-            <div className="flex justify-between items-center">
-                <Link to="/" className="text-xl font-bold text-gray-900 tracking-tight hover:text-gray-700 transition-colors">
-                    ODIN
+        <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
+            scrolled ? 'bg-white/60 backdrop-blur-2xl border-b border-black/5 shadow-sm' : 'bg-white/20 backdrop-blur-md border-b border-transparent'
+        }`}>
+            <div className="mx-auto max-w-7xl px-8 h-20 flex items-center justify-between">
+                
+                {/* Logo Area */}
+                <Link 
+                    to="/" 
+                    className="flex items-center gap-2 group w-48" // w-48 keeps logo area balanced with right CTA area
+                >
+                    <span className="font-display text-2xl tracking-tighter text-gray-900 group-hover:opacity-70 transition-opacity">
+                        odin.
+                    </span>
                 </Link>
 
-                {/* Desktop Navigation */}
-                <div className="hidden md:flex gap-6 items-center">
+                {/* Center Links (Matching "PLATFORM > DEVELOPERS > BLOGS") */}
+                <div className="flex-1 hidden md:flex items-center justify-center gap-10">
                     {navLinks.map((link) => (
                         <Link
                             key={link.path}
                             to={link.path}
-                            className={`text-sm font-medium transition-colors ${isActive(link.path) ? 'text-gray-900' : 'text-gray-500 hover:text-gray-900'}`}
+                            className="flex items-center gap-1.5 focus:outline-none group"
                         >
-                            {link.label}
+                            <span className={`text-[0.65rem] tracking-[0.2em] font-bold uppercase transition-colors duration-300 ${
+                                isActive(link.path)
+                                    ? 'text-gray-900'
+                                    : 'text-gray-500 group-hover:text-gray-900'
+                            }`}>
+                                {link.label}
+                            </span>
+                            <span className="text-gray-400 text-[0.55rem] font-bold group-hover:translate-x-0.5 transition-transform">
+                                ❯
+                            </span>
                         </Link>
                     ))}
-                    <a
-                        href="/logout"
-                        className="text-sm font-medium text-red-500 border border-red-300 px-3 py-1.5 rounded-lg hover:bg-red-50 hover:text-red-700 hover:border-red-400 transition-colors"
-                    >
-                        Logout
-                    </a>
                 </div>
 
-                {/* Mobile Hamburger Button */}
-                <button
-                    className="md:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
-                    onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                    aria-label="Toggle menu"
-                >
-                    {mobileMenuOpen ? (
-                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    ) : (
-                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                        </svg>
-                    )}
-                </button>
-            </div>
-
-            {/* Mobile Menu */}
-            {mobileMenuOpen && (
-                <div className="md:hidden mt-4 pt-4 border-t border-gray-100 animate-fade-in">
-                    <div className="flex flex-col gap-3">
-                        {navLinks.map((link) => (
-                            <Link
-                                key={link.path}
-                                to={link.path}
-                                onClick={() => setMobileMenuOpen(false)}
-                                className={`text-sm font-medium py-2 px-3 rounded-lg transition-colors ${isActive(link.path)
-                                    ? 'text-gray-900 bg-gray-100'
-                                    : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'}`}
-                            >
-                                {link.label}
-                            </Link>
-                        ))}
-                        <a
-                            href="/logout"
-                            className="text-sm font-medium text-red-500 border border-red-300 py-2 px-3 rounded-lg hover:bg-red-50 hover:border-red-400 transition-colors"
+                {/* Right Area (Matching "Experience Sarvam" "Talk to Sales") */}
+                <div className="hidden md:flex items-center justify-end w-48 gap-3">
+                    {isAuthenticated ? (
+                        <a 
+                            href="/logout" 
+                            className="btn-primary !bg-none !bg-gray-100 hover:!bg-gray-200 !text-gray-700 !px-5 !py-2.5 !text-[0.75rem] !font-bold uppercase tracking-wider !shadow-none"
                         >
-                            Logout
+                            Log Out
                         </a>
-                    </div>
+                    ) : (
+                        <a 
+                            href="/login" 
+                            className="btn-primary !px-5 !py-2.5 !text-[0.75rem] !font-bold uppercase tracking-wider !shadow-md"
+                        >
+                            Sign In
+                        </a>
+                    )}
                 </div>
-            )}
+                
+                {/* Mobile placeholder */}
+                <div className="md:hidden flex items-center">
+                    <span className="text-xs font-bold uppercase tracking-widest text-gray-500">Menu</span>
+                </div>
+            </div>
         </nav>
     );
 }

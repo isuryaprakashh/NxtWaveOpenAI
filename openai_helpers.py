@@ -1,11 +1,15 @@
 """
-Gemini API helper functions
-AI-powered email analysis using Google's Gemini 2.5 Flash
+AI API helper functions
+AI-powered email analysis using Google's Gemini 2.5 Flash with Groq fallback
 """
 import os
 import json
 import re
+import hashlib
+import time
+import requests
 from typing import Optional, Dict, List
+from functools import lru_cache
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
@@ -15,16 +19,102 @@ EMAIL_BODY_TRUNCATE_LIMIT = 8000
 REPLY_CONTEXT_LIMIT = 4000
 TEMPERATURE = 0.2
 
+# ============ Cache Configuration ============
+CACHE_ENABLED = True
+CACHE_TTL_SECONDS = 3600  # 1 hour
+CACHE_MAX_SIZE = 500  # Max cached items
+
+# In-memory cache: {hash: {"data": result, "timestamp": time}}
+_response_cache: Dict[str, Dict] = {}
+
 # Configure Gemini - API key should be set via environment variable
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
-    print("WARNING: GEMINI_API_KEY not set. AI features will not work.")
-    print("Please set GEMINI_API_KEY in your .env file.")
+    print("WARNING: GEMINI_API_KEY not set. Will use Groq as fallback if available.")
 else:
     genai.configure(api_key=GEMINI_API_KEY)
 
 # Use Gemini 2.5 Flash - fast and efficient for email analysis
 MODEL_NAME = "gemini-2.5-flash"
+
+# ============ Groq Fallback Configuration ============
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_MODEL = "compound-beta-mini"  # Compact compound model on Groq
+
+if not GROQ_API_KEY:
+    print("WARNING: GROQ_API_KEY not set. Fallback AI will not be available.")
+else:
+    # Debug: Verify key is loaded correctly
+    print(f"Groq key loaded: True")
+    print(f"Groq key prefix: {GROQ_API_KEY[:8] if len(GROQ_API_KEY) > 8 else 'too_short'}...")
+
+
+# ============ Cache Helper Functions ============
+def _get_cache_key(text: str, subject: str = "") -> str:
+    """Generate a cache key from email content."""
+    content = f"{subject}:{text[:500]}"  # Use first 500 chars for key
+    return hashlib.md5(content.encode()).hexdigest()
+
+
+def _get_cached(cache_key: str) -> Optional[Dict]:
+    """Get cached result if exists and not expired."""
+    if not CACHE_ENABLED or cache_key not in _response_cache:
+        return None
+    
+    cached = _response_cache[cache_key]
+    if time.time() - cached["timestamp"] > CACHE_TTL_SECONDS:
+        del _response_cache[cache_key]
+        return None
+    
+    print(f"📦 Cache HIT for key {cache_key[:8]}...")
+    return cached["data"]
+
+
+def _set_cached(cache_key: str, data: Dict) -> None:
+    """Store result in cache."""
+    if not CACHE_ENABLED:
+        return
+    
+    # Cleanup if cache is full
+    if len(_response_cache) >= CACHE_MAX_SIZE:
+        _cleanup_cache()
+    
+    _response_cache[cache_key] = {
+        "data": data,
+        "timestamp": time.time()
+    }
+    print(f"💾 Cached result for key {cache_key[:8]}...")
+
+
+def _cleanup_cache() -> None:
+    """Remove oldest entries when cache is full."""
+    if len(_response_cache) < CACHE_MAX_SIZE // 2:
+        return
+    
+    # Remove expired entries first
+    current_time = time.time()
+    expired_keys = [
+        k for k, v in _response_cache.items() 
+        if current_time - v["timestamp"] > CACHE_TTL_SECONDS
+    ]
+    for key in expired_keys:
+        del _response_cache[key]
+    
+    # If still too many, remove oldest
+    while len(_response_cache) >= CACHE_MAX_SIZE:
+        oldest_key = min(_response_cache, key=lambda k: _response_cache[k]["timestamp"])
+        del _response_cache[oldest_key]
+
+
+def get_cache_stats() -> Dict:
+    """Get cache statistics."""
+    return {
+        "enabled": CACHE_ENABLED,
+        "size": len(_response_cache),
+        "max_size": CACHE_MAX_SIZE,
+        "ttl_seconds": CACHE_TTL_SECONDS
+    }
 
 
 def get_model() -> genai.GenerativeModel:
@@ -32,9 +122,85 @@ def get_model() -> genai.GenerativeModel:
     return genai.GenerativeModel(MODEL_NAME)
 
 
-def call_gemini(prompt: str, json_mode: bool = False) -> Optional[str]:
+def call_groq(prompt: str, json_mode: bool = False) -> Optional[str]:
     """
-    Call Gemini API with the given prompt.
+    Call Groq API with the given prompt.
+    
+    Args:
+        prompt: The text prompt to send to the model
+        json_mode: If True, instruct model to return JSON
+        
+    Returns:
+        The model's response text, or None if an error occurred
+    """
+    if not GROQ_API_KEY:
+        print("Groq API key not configured")
+        return None
+        
+    try:
+        headers = {
+            "Authorization": f"Bearer {GROQ_API_KEY.strip()}",
+            "Content-Type": "application/json",
+        }
+        
+        # Build messages with system prompt for JSON mode
+        messages = []
+        if json_mode:
+            messages.append({
+                "role": "system", 
+                "content": "You are a helpful assistant. Always respond with valid JSON only, no markdown, no explanation."
+            })
+        messages.append({"role": "user", "content": prompt})
+        
+        payload = {
+            "model": GROQ_MODEL,
+            "messages": messages,
+            "temperature": TEMPERATURE,
+            "max_tokens": MAX_OUTPUT_TOKENS,
+        }
+        
+        # Note: Compound models may not support response_format, so we rely on system prompt
+        
+        response = requests.post(
+            GROQ_API_URL,
+            headers=headers,
+            json=payload,
+            timeout=15,  # Fast timeout - fail quickly if slow
+        )
+        
+        if response.status_code == 401:
+            print("❌ Groq AUTH FAILED → Check API key (must start with gsk_)")
+            return None
+        
+        if response.status_code != 200:
+            print(f"Groq API Error: {response.status_code} {response.text[:300]}")
+            return None
+        
+        data = response.json()
+        
+        # Handle both standard and compound model response formats
+        if "choices" in data and len(data["choices"]) > 0:
+            return data["choices"][0]["message"]["content"]
+        elif "output" in data:
+            # Compound model response format
+            for item in data.get("output", []):
+                if item.get("type") == "message":
+                    content = item.get("content", [])
+                    for c in content:
+                        if c.get("type") == "output_text":
+                            return c.get("text", "")
+        
+        print(f"Groq unexpected response format: {str(data)[:200]}")
+        return None
+        
+    except Exception as e:
+        print(f"Groq Exception: {e}")
+        return None
+
+
+def _call_gemini_internal(prompt: str, json_mode: bool = False) -> Optional[str]:
+    """
+    Internal function to call Gemini API.
     
     Args:
         prompt: The text prompt to send to the model
@@ -43,6 +209,9 @@ def call_gemini(prompt: str, json_mode: bool = False) -> Optional[str]:
     Returns:
         The model's response text, or None if an error occurred
     """
+    if not GEMINI_API_KEY:
+        return None
+        
     try:
         model = get_model()
         
@@ -71,9 +240,39 @@ def call_gemini(prompt: str, json_mode: bool = False) -> Optional[str]:
         return None
 
 
+def call_gemini(prompt: str, json_mode: bool = False) -> Optional[str]:
+    """
+    Call Gemini API with the given prompt, with automatic Groq fallback.
+    
+    Tries Gemini first, falls back to Groq if Gemini fails.
+    
+    Args:
+        prompt: The text prompt to send to the model
+        json_mode: If True, request JSON-formatted response
+        
+    Returns:
+        The model's response text, or None if both APIs failed
+    """
+    # Try Gemini first
+    result = _call_gemini_internal(prompt, json_mode)
+    if result:
+        return result
+    
+    # Fallback to Groq
+    print("Gemini failed, falling back to Groq...")
+    result = call_groq(prompt, json_mode)
+    if result:
+        print("Groq fallback successful")
+        return result
+    
+    print("Both Gemini and Groq failed")
+    return None
+
+
 def analyze_email_comprehensive(text: str, subject: str = "") -> Dict:
     """
     Perform ALL email analysis in a single API call for maximum speed.
+    Uses caching to avoid repeated API calls for the same content.
     
     Args:
         text: The email body text
@@ -84,29 +283,70 @@ def analyze_email_comprehensive(text: str, subject: str = "") -> Dict:
     """
     if not text:
         return _get_fallback_analysis()
+    
+    # Check cache first
+    cache_key = _get_cache_key(text, subject)
+    cached_result = _get_cached(cache_key)
+    if cached_result:
+        return cached_result
         
-    prompt = f"""
-    Analyze this email and provide the following in a SINGLE JSON object:
-    1. "summary": 2-4 bullet points with an actionable next step.
-    2. "priority": "HIGH", "MEDIUM", or "LOW" based on urgency.
-    3. "sentiment": object with "sentiment" ("positive", "negative", "neutral") and "score" (0.0-1.0).
-    4. "category": One of ["Urgent Support", "Work/Business", "Personal", "Newsletter", "Spam/Promotional", "General"].
-    5. "extracted_info": object with "action_items" (list) and "dates" (list).
-    6. "quick_replies": list of 3 distinct, short, professional reply options that directly address the sender's specific questions or content. Avoid generic responses; tailor them to the email's actual topic.
+    prompt = f"""Analyze this email and respond with ONLY a JSON object (no markdown, no explanation):
+{{
+  "summary": "2-4 bullet points with actionable next step",
+  "priority": "HIGH" or "MEDIUM" or "LOW",
+  "sentiment": {{"sentiment": "positive/negative/neutral", "score": 0.0-1.0}},
+  "category": "Urgent Support" or "Work/Business" or "Personal" or "Newsletter" or "Spam/Promotional" or "General",
+  "extracted_info": {{"action_items": [], "dates": []}},
+  "quick_replies": ["reply1", "reply2", "reply3"]
+}}
 
-    SUBJECT: {subject}
-    EMAIL BODY:
-    {text[:EMAIL_BODY_TRUNCATE_LIMIT]}
-    """
+SUBJECT: {subject}
+EMAIL BODY:
+{text[:EMAIL_BODY_TRUNCATE_LIMIT]}
+"""
     
     result = call_gemini(prompt, json_mode=True)
     if result:
-        try:
-            return json.loads(result)
-        except json.JSONDecodeError:
-            print("Failed to decode JSON from comprehensive analysis")
+        # Try to extract JSON from response (handles markdown code blocks, text wrapping, etc.)
+        parsed = _extract_json(result)
+        if parsed:
+            # Cache the successful result
+            _set_cached(cache_key, parsed)
+            return parsed
+        print(f"Failed to decode JSON. Raw response: {result[:200]}...")
             
     return _get_fallback_analysis()
+
+
+def _extract_json(text: str) -> Optional[Dict]:
+    """Extract JSON from text that may contain markdown or extra content."""
+    if not text:
+        return None
+    
+    # Try direct parse first
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    
+    # Try to find JSON in markdown code block
+    import re
+    json_patterns = [
+        r'```json\s*(.*?)\s*```',  # ```json ... ```
+        r'```\s*(.*?)\s*```',       # ``` ... ```
+        r'\{[\s\S]*\}',             # Raw { ... }
+    ]
+    
+    for pattern in json_patterns:
+        match = re.search(pattern, text, re.DOTALL)
+        if match:
+            try:
+                json_str = match.group(1) if '```' in pattern else match.group(0)
+                return json.loads(json_str)
+            except (json.JSONDecodeError, IndexError):
+                continue
+    
+    return None
 
 
 def _get_fallback_analysis() -> Dict:

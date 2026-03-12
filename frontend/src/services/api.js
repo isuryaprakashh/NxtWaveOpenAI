@@ -30,10 +30,16 @@ export const fetchInbox = (query = '') => {
 };
 
 // Message APIs
-export const fetchMessage = (id, refresh = false) => {
-    const params = refresh ? '?refresh=1' : '';
-    return fetchJSON(`/api/message/${id}${params}`);
+export const fetchMessage = (id, options = {}) => {
+    const params = new URLSearchParams();
+    if (options.refresh) params.set('refresh', '1');
+    if (options.lazy) params.set('lazy', '1');
+    const queryString = params.toString();
+    return fetchJSON(`/api/message/${id}${queryString ? '?' + queryString : ''}`);
 };
+
+// Fetch AI analysis separately (for lazy loading)
+export const fetchAnalysis = (id) => fetchJSON(`/api/message/${id}/analyze`);
 
 export const generateReply = (id, tone, instructions) =>
     fetchJSON(`/generate_reply/${id}`, {

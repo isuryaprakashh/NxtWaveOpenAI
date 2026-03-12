@@ -1,53 +1,203 @@
-/* Import Inter font for modern typography - MUST be first */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+/* Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Instrument+Serif:ital@0;1&display=swap');
 
 @import "tailwindcss";
 
-/* Base styles */
+:root {
+  --color-blob-orange: #ff9b5e;
+  --color-blob-lavender: #c2a3ff;
+  --color-blob-blue: #a3c2ff;
+  --font-display: 'Instrument Serif', Georgia, serif;
+  --font-body: 'Inter', -apple-system, sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; font-size: 16px; }
+
 body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #fdfdfc;
+  color: #0f0f0f;
+  overflow-x: hidden;
 }
 
-/* Smooth scrolling */
-html {
-    scroll-behavior: smooth;
+/* ===== Custom Scrollbar ===== */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.3); }
+
+/* ===== Ultra Premium Glassmorphism ===== */
+.glass {
+  background: rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.8),
+              0 8px 32px rgba(0, 0, 0, 0.04);
+  border-radius: 24px;
 }
 
-/* Custom scrollbar for modern look */
-::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+.glass-dark {
+  background: rgba(15, 15, 15, 0.7);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1),
+              0 8px 32px rgba(0, 0, 0, 0.2);
+  border-radius: 24px;
+  color: white;
 }
 
-::-webkit-scrollbar-track {
-    background: #f1f1f1;
-    border-radius: 4px;
+/* ===== Interactive Cards ===== */
+.card-premium {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 1),
+              0 4px 24px rgba(0, 0, 0, 0.03);
+  border-radius: 24px;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.card-premium:hover {
+  transform: translateY(-4px) scale(1.01);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 1),
+              0 20px 48px rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.9);
 }
 
-::-webkit-scrollbar-thumb {
-    background: #c1c1c1;
-    border-radius: 4px;
+/* ===== Dynamic Gradient Background (The "Sarvam" feel) ===== */
+.bg-ethereal {
+  position: relative;
+  background-color: #fdfdfc;
+  overflow: hidden;
+  z-index: 0;
+}
+.bg-ethereal::before, .bg-ethereal::after, .blob-3 {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(100px);
+  z-index: -1;
+  opacity: 0.5;
+  animation: float-blob 20s infinite alternate ease-in-out;
+}
+.bg-ethereal::before {
+  top: -10%; left: 0%;
+  width: 70vw; height: 70vw;
+  background: radial-gradient(circle, var(--color-blob-orange) 0%, rgba(255,155,94,0) 70%);
+  animation-duration: 25s;
+}
+.bg-ethereal::after {
+  bottom: -10%; right: 0%;
+  width: 60vw; height: 60vw;
+  background: radial-gradient(circle, var(--color-blob-lavender) 0%, rgba(194,163,255,0) 70%);
+  animation-duration: 30s;
+  animation-delay: -5s;
+}
+.blob-3 {
+  top: 30%; left: 50%;
+  transform: translateX(-50%);
+  width: 50vw; height: 50vw;
+  background: radial-gradient(circle, var(--color-blob-blue) 0%, rgba(163,194,255,0) 70%);
+  animation-duration: 22s;
+  animation-delay: -10s;
+  pointer-events: none;
 }
 
-::-webkit-scrollbar-thumb:hover {
-    background: #a8a8a8;
+@keyframes float-blob {
+  0% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(5%, -5%) scale(1.1); }
+  66% { transform: translate(-2%, 8%) scale(0.9); }
+  100% { transform: translate(-8%, -2%) scale(1.05); }
+}
+
+/* ===== Typography Helpers ===== */
+.font-display { 
+  font-family: var(--font-display); 
+  letter-spacing: -0.03em;
+}
+
+/* ===== Micro-interactions & Buttons ===== */
+.pill-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 20px;
+  border-radius: 999px;
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(16px);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 1),
+              0 2px 12px rgba(0, 0, 0, 0.06);
+  color: #4a4a4a;
+  transition: all 0.3s ease;
+}
+.pill-badge:hover {
+  background: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 1),
+              0 6px 20px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+}
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px 32px;
+  border-radius: 999px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  background: linear-gradient(180deg, #2a2a2a 0%, #111 100%);
+  color: #fff;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.2),
+              0 4px 16px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  border: none;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+.btn-primary::after {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%;
+  width: 50%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+  transition: all 0.5s ease;
+}
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.2),
+              0 8px 24px rgba(0, 0, 0, 0.3);
+}
+.btn-primary:hover::after {
+  left: 150%;
+}
+.btn-primary:active { transform: translateY(0); }
+
+/* Decorative Flourish matching Sarvam */
+.flourish {
+  fill: none;
+  stroke: #d1d1d1;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 /* Animations */
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+@keyframes fadeUpSmooth {
+  from { opacity: 0; transform: translateY(30px); filter: blur(4px); }
+  to   { opacity: 1; transform: translateY(0); filter: blur(0); }
 }
-
-.animate-fade-in {
-    animation: fadeIn 0.3s ease-out;
-}
+.animate-fade-up { animation: fadeUpSmooth 1s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.delay-100 { animation-delay: 0.1s; }
+.delay-200 { animation-delay: 0.2s; }
+.delay-300 { animation-delay: 0.3s; }
+.delay-400 { animation-delay: 0.4s; }
+.delay-500 { animation-delay: 0.5s; }

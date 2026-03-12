@@ -38,6 +38,7 @@ def init_db() -> None:
             date TEXT,
             snippet TEXT,
             body TEXT,
+            summary TEXT,
             priority TEXT,
             sentiment TEXT,
             sentiment_score REAL,
@@ -45,6 +46,12 @@ def init_db() -> None:
             processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+    
+    # Add summary column if it doesn't exist (migration for existing DBs)
+    try:
+        cursor.execute('ALTER TABLE emails ADD COLUMN summary TEXT')
+    except sqlite3.OperationalError:
+        pass  # Column already exists
     
     # Create index on user_id for faster queries
     cursor.execute('''
@@ -81,8 +88,8 @@ def save_email_analysis(email_data: Dict) -> bool:
     try:
         cursor.execute('''
             INSERT OR REPLACE INTO emails 
-            (id, user_id, subject, sender, date, snippet, body, priority, sentiment, sentiment_score, category)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (id, user_id, subject, sender, date, snippet, body, summary, priority, sentiment, sentiment_score, category)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             email_data.get('id'),
             email_data.get('user_id'),
@@ -91,6 +98,7 @@ def save_email_analysis(email_data: Dict) -> bool:
             email_data.get('date'),
             email_data.get('snippet'),
             email_data.get('body'),
+            email_data.get('summary'),
             email_data.get('priority'),
             email_data.get('sentiment'),
             email_data.get('sentiment_score'),
@@ -276,6 +284,7 @@ def get_email_by_id(email_id: str, user_id: Optional[str] = None) -> Optional[Di
                 'date': row['date'],
                 'snippet': row['snippet'],
                 'body': row['body'],
+                'summary': row['summary'] if 'summary' in row.keys() else None,
                 'priority': row['priority'],
                 'sentiment': row['sentiment'],
                 'sentiment_score': row['sentiment_score'],

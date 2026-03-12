@@ -1,142 +1,101 @@
 import React, { useEffect, useState } from "react";
 import { checkAuth } from "../services/api";
+import Navbar from "../components/Navbar";
 
-export default function OdinLanding() {
+export default function HomePage() {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
 
     useEffect(() => {
-        // Check if user is already signed in
-        checkAuth().then(data => {
-            setIsAuthenticated(data.authenticated || false);
-        });
+        checkAuth().then(data => setIsAuthenticated(data.authenticated || false));
     }, []);
 
+    // The beautiful Sarvam-style SVG ornament
+    const Ornament = () => (
+        <svg width="180" height="40" viewBox="0 0 180 40" className="mx-auto mb-6 opacity-60">
+            <path d="M70,25 C75,18 85,18 90,25" className="flourish" />
+            <path d="M60,20 C68,10 82,10 90,20" className="flourish" />
+            <path d="M50,15 C60,5 80,5 90,15" className="flourish" />
+            <path d="M110,25 C105,18 95,18 90,25" className="flourish" />
+            <path d="M120,20 C112,10 98,10 90,20" className="flourish" />
+            <path d="M130,15 C120,5 100,5 90,15" className="flourish" />
+            
+            <circle cx="90" cy="15" r="3" fill="#d1d1d1" />
+            <circle cx="65" cy="22" r="2" fill="#d1d1d1" />
+            <circle cx="115" cy="22" r="2" fill="#d1d1d1" />
+            
+            <path d="M20,25 L45,25" className="flourish" />
+            <path d="M160,25 L135,25" className="flourish" />
+        </svg>
+    );
+
     return (
-        <div className="font-sans text-[#1a1a1a] bg-white">
-            {/* Navigation - Shows different button based on auth status */}
-            <nav className="sticky top-0 z-50 flex items-center justify-between border-b border-gray-200 bg-white px-8 py-4">
-                <h1 className="text-xl font-bold tracking-tight">ODIN</h1>
-                <div className="flex items-center gap-6">
-                    <a href="#features" className="text-sm font-medium text-gray-500 hover:text-black">Features</a>
-                    <a href="#how-it-works" className="text-sm font-medium text-gray-500 hover:text-black">How It Works</a>
+        <div className="bg-ethereal min-h-screen flex flex-col font-sans">
+            <Navbar />
+            
+            {/* 3 moving blobs for background (classes defined in index.css) */}
+            <div className="blob-3"></div>
+
+            <main className="flex-1 flex flex-col items-center justify-center text-center px-6 relative z-10 -mt-10">
+                
+                <div className="animate-fade-up">
+                    <Ornament />
+                </div>
+
+                {/* Pill badge matching reference */}
+                <div className="flex justify-center mb-8 animate-fade-up delay-100">
+                    <span className="pill-badge text-[#6b6bf9] font-medium tracking-wide">
+                        Your Intelligent Email Assistant
+                    </span>
+                </div>
+
+                {/* Massive sharp serif heading */}
+                <h1 className="font-display text-[4rem] sm:text-[5.5rem] md:text-[6.5rem] leading-[1.05] tracking-tight mb-6 text-gray-900 animate-fade-up delay-200" style={{ letterSpacing: '-0.04em' }}>
+                    Clarity for all from ODIN
+                </h1>
+
+                {/* Subtitle matching Sarvam layout */}
+                <p className="text-lg md:text-xl text-[#555] max-w-2xl mx-auto mb-10 leading-relaxed font-medium animate-fade-up delay-300">
+                    Built on secure compute. Powered by frontier-class Gemini models.<br />
+                    Delivering absolute inbox Intelligence.
+                </p>
+
+                {/* Button matching Sarvam "Experience Sarvam" */}
+                <div className="flex justify-center animate-fade-up delay-400">
                     {isAuthenticated ? (
-                        <a href="/inbox" className="rounded-md bg-black px-5 py-2 text-sm font-semibold text-white hover:bg-gray-800">
-                            Go to Inbox
+                        <a href="/inbox" className="btn-primary !px-10 !py-4 shadow-xl">
+                            Experience ODIN
                         </a>
                     ) : (
-                        <a href="/login" className="rounded-md bg-black px-5 py-2 text-sm font-semibold text-white hover:bg-gray-800">
-                            Sign In
+                        <a href="/login" className="btn-primary !px-10 !py-4 shadow-xl text-[1.05rem]">
+                            Experience ODIN
                         </a>
                     )}
                 </div>
-            </nav>
 
-            {/* Hero */}
-            <section className="border-b border-gray-200 bg-gradient-to-b from-white to-gray-50 px-6 py-32 text-center">
-                <div className="mx-auto max-w-4xl">
-                    <h1 className="mb-6 text-6xl font-bold tracking-tight">ODIN</h1>
-                    <p className="mb-8 text-2xl text-gray-500">AI-Powered Email Intelligence</p>
-                    <p className="mx-auto mb-12 max-w-2xl text-lg text-gray-500">
-                        Transform your inbox into a strategic command center. ODIN uses advanced AI to analyze, prioritize, and respond to your emails with unmatched intelligence and speed.
-                    </p>
-                    <div className="flex flex-wrap justify-center gap-4">
-                        {isAuthenticated ? (
-                            <a href="/inbox" className="rounded-lg bg-black px-10 py-4 text-sm font-semibold uppercase tracking-wide text-white hover:bg-gray-800">
-                                Open Inbox
-                            </a>
-                        ) : (
-                            <a href="/login" className="rounded-lg bg-black px-10 py-4 text-sm font-semibold uppercase tracking-wide text-white hover:bg-gray-800">
-                                Get Started
-                            </a>
-                        )}
-                        <a href="#features" className="rounded-lg border border-gray-300 px-10 py-4 text-sm font-semibold uppercase tracking-wide hover:border-black">Learn More</a>
+            </main>
+
+            {/* Bottom logos strip matching Sarvam reference */}
+            <div className="relative z-10 pb-16 pt-10 text-center animate-fade-up delay-500">
+                <p className="text-[0.65rem] font-bold tracking-[0.2em] text-[#888] uppercase mb-10">
+                    Built With Powerful Integrations
+                </p>
+                <div className="flex flex-wrap justify-center items-center gap-12 md:gap-20 opacity-40 grayscale hover:grayscale-0 transition-all duration-700">
+                    <div className="text-xl font-bold font-serif italic tracking-tighter">Gmail</div>
+                    <div className="flex items-center gap-2">
+                        <span className="text-xl">🛡️</span>
+                        <span className="text-sm font-bold tracking-tight uppercase">OAuth</span>
+                    </div>
+                    <div className="flex flex-col items-center leading-none">
+                        <span className="text-xl font-bold tracking-tighter">Google</span>
+                        <span className="text-[0.55rem] font-semibold tracking-widest uppercase">Workspace</span>
+                    </div>
+                    <div className="text-2xl font-bold tracking-tight">Gemini</div>
+                    <div className="flex items-center gap-2">
+                        <span className="text-xl">⚡</span>
+                        <span className="text-lg font-bold">Groq</span>
                     </div>
                 </div>
-            </section>
-
-            {/* Features */}
-            <section id="features" className="px-6 py-24">
-                <div className="mx-auto max-w-6xl">
-                    <div className="mb-20 text-center">
-                        <h2 className="mb-4 text-4xl font-bold tracking-tight">Powerful Features</h2>
-                        <p className="text-lg text-gray-500">Everything you need to master your inbox</p>
-                    </div>
-
-                    <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-                        {["Smart Priority Detection", "Intelligent Summarization", "AI-Generated Replies", "Smart Categorization", "Sentiment Analysis", "Information Extraction"].map((title, i) => (
-                            <div key={i} className="rounded-lg border border-gray-200 bg-gray-50 p-10 transition hover:-translate-y-1 hover:border-black hover:shadow-xl">
-                                <div className="mb-6 text-4xl font-bold tracking-tighter text-black/30">{String(i + 1).padStart(2, "0")}</div>
-                                <h3 className="mb-4 text-xl font-semibold">{title}</h3>
-                                <p className="text-gray-500">
-                                    AI-powered capabilities designed to save time, improve focus, and help you respond smarter and faster.
-                                </p>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </section>
-
-            {/* Stats */}
-            <section className="bg-black px-6 py-20 text-white">
-                <div className="mx-auto grid max-w-5xl gap-12 text-center md:grid-cols-3">
-                    <div>
-                        <h3 className="text-5xl font-bold">5x</h3>
-                        <p className="mt-2 text-sm uppercase tracking-widest text-gray-400">Faster Processing</p>
-                    </div>
-                    <div>
-                        <h3 className="text-5xl font-bold">100%</h3>
-                        <p className="mt-2 text-sm uppercase tracking-widest text-gray-400">Enterprise Security</p>
-                    </div>
-                    <div>
-                        <h3 className="text-5xl font-bold">24/7</h3>
-                        <p className="mt-2 text-sm uppercase tracking-widest text-gray-400">Always Available</p>
-                    </div>
-                </div>
-            </section>
-
-            {/* How It Works */}
-            <section id="how-it-works" className="bg-white px-6 py-24">
-                <div className="mx-auto max-w-6xl">
-                    <div className="mb-20 text-center">
-                        <h2 className="mb-4 text-4xl font-bold tracking-tight">How It Works</h2>
-                        <p className="text-lg text-gray-500">Simple, secure, and powerful</p>
-                    </div>
-
-                    <div className="grid gap-8 md:grid-cols-3">
-                        {[
-                            { title: "Connect Your Gmail", desc: "Secure OAuth 2.0 authentication keeps your data private." },
-                            { title: "AI Analyzes Emails", desc: "Advanced models process emails in parallel for instant insights." },
-                            { title: "Take Action", desc: "Summaries, priorities, and AI replies—directly in your inbox." },
-                        ].map((step, i) => (
-                            <div key={i} className="rounded-lg border border-gray-200 bg-gray-50 p-10 transition hover:-translate-y-1 hover:shadow-xl">
-                                <div className="mb-6 text-4xl font-bold text-black/30">{i + 1}</div>
-                                <h3 className="mb-4 text-xl font-semibold">{step.title}</h3>
-                                <p className="text-gray-500">{step.desc}</p>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </section>
-
-            {/* CTA */}
-            <section className="border-t border-gray-200 bg-gray-50 px-6 py-24 text-center">
-                <h2 className="mb-4 text-4xl font-bold tracking-tight">Ready to Transform Your Inbox?</h2>
-                <p className="mx-auto mb-10 max-w-xl text-lg text-gray-500">Join ODIN and experience the future of email management.</p>
-                {isAuthenticated ? (
-                    <a href="/inbox" className="rounded-lg bg-black px-12 py-4 text-sm font-semibold uppercase tracking-wide text-white hover:bg-gray-800">
-                        Open Your Inbox
-                    </a>
-                ) : (
-                    <a href="/login" className="rounded-lg bg-black px-12 py-4 text-sm font-semibold uppercase tracking-wide text-white hover:bg-gray-800">
-                        Start Using ODIN
-                    </a>
-                )}
-            </section>
-
-            {/* Footer */}
-            <footer className="border-t border-gray-800 bg-black px-6 py-12 text-center text-sm text-gray-400">
-                © 2025 ODIN. AI Email Assistant powered by Advanced AI.
-            </footer>
+            </div>
         </div>
     );
 }

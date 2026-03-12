@@ -14,19 +14,13 @@ export default function ComposeModal({ isOpen, onClose }) {
         e.preventDefault();
         setSending(true);
         setStatus(null);
-
         try {
             const result = await composeEmail(to, subject, body);
             if (result.error) throw new Error(result.error);
-
-            setStatus({ type: 'success', msg: 'Email sent successfully!' });
-            // Clear form after success
+            setStatus({ type: 'success', msg: 'Dispatch confirmed.' });
             setTimeout(() => {
-                setTo('');
-                setSubject('');
-                setBody('');
-                setStatus(null);
-                onClose();
+                setTo(''); setSubject(''); setBody('');
+                setStatus(null); onClose();
             }, 1500);
         } catch (err) {
             setStatus({ type: 'error', msg: err.message });
@@ -36,118 +30,89 @@ export default function ComposeModal({ isOpen, onClose }) {
     };
 
     const handleClose = () => {
-        if (sending) return; // Prevent closing while sending
+        if (sending) return;
         setStatus(null);
         onClose();
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            {/* Backdrop */}
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 animate-fade-in">
+            {/* Ultra-frosted Backdrop */}
             <div
-                className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+                className="absolute inset-0 bg-[#fdfdfc]/60 backdrop-blur-3xl"
                 onClick={handleClose}
             />
 
-            {/* Modal */}
-            <div className="relative w-full max-w-lg bg-white rounded-xl shadow-2xl animate-fade-in">
-                {/* Header */}
-                <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-                    <h2 className="text-lg font-semibold text-gray-900">New Email</h2>
+            {/* Modal Box */}
+            <div className="relative w-full max-w-2xl glass !rounded-[40px] shadow-[0_32px_100px_rgba(0,0,0,0.12)] border border-white/80 animate-fade-up px-12 py-10">
+                
+                {/* Minimalist Header */}
+                <div className="flex items-center justify-between mb-10">
+                    <h2 className="font-display text-4xl tracking-tighter text-gray-900 leading-none">
+                        Compose
+                    </h2>
                     <button
                         onClick={handleClose}
-                        className="p-1 rounded-lg hover:bg-gray-100 transition-colors"
+                        className="w-10 h-10 rounded-full bg-black/[0.03] hover:bg-black/[0.08] transition-colors flex items-center justify-center text-gray-400 hover:text-gray-900"
                         disabled={sending}
                     >
-                        <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                         </svg>
                     </button>
                 </div>
 
                 {/* Form */}
-                <form onSubmit={handleSubmit} className="p-6 space-y-4">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">To</label>
-                        <input
-                            type="email"
-                            value={to}
-                            onChange={(e) => setTo(e.target.value)}
-                            placeholder="recipient@example.com"
-                            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
-                            required
-                            disabled={sending}
-                        />
-                    </div>
+                <form onSubmit={handleSubmit} className="space-y-6">
+                    {[
+                        { label: 'Recipient', type: 'email', value: to, set: setTo, placeholder: 'name@domain.com' },
+                        { label: 'Subject', type: 'text', value: subject, set: setSubject, placeholder: 'Regarding your inquiry...' },
+                    ].map(({ label, type, value, set, placeholder }) => (
+                        <div key={label} className="group border-b border-black/[0.04] focus-within:border-[#c2a3ff] transition-colors pb-4">
+                            <label className="block text-[0.55rem] font-bold uppercase tracking-[0.2em] text-gray-400 mb-2">{label}</label>
+                            <input
+                                type={type}
+                                value={value}
+                                onChange={e => set(e.target.value)}
+                                placeholder={placeholder}
+                                className="w-full bg-transparent border-0 p-0 text-[1.05rem] font-medium text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-0"
+                                required
+                                disabled={sending}
+                            />
+                        </div>
+                    ))}
 
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
-                        <input
-                            type="text"
-                            value={subject}
-                            onChange={(e) => setSubject(e.target.value)}
-                            placeholder="Email subject"
-                            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all"
-                            required
-                            disabled={sending}
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
+                    <div className="group border-b border-black/[0.04] focus-within:border-[#c2a3ff] transition-colors pb-4 h-48">
+                        <label className="block text-[0.55rem] font-bold uppercase tracking-[0.2em] text-gray-400 mb-2">Message Body</label>
                         <textarea
                             value={body}
-                            onChange={(e) => setBody(e.target.value)}
-                            placeholder="Write your message..."
-                            rows={8}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black transition-all resize-none"
+                            onChange={e => setBody(e.target.value)}
+                            placeholder="Type your message..."
+                            className="w-full h-full bg-transparent border-0 p-0 text-[0.95rem] font-medium text-gray-800 placeholder-gray-300 focus:outline-none focus:ring-0 resize-none leading-relaxed"
                             required
                             disabled={sending}
                         />
                     </div>
 
-                    {/* Status Message */}
+                    {/* Status Feedback */}
                     {status && (
-                        <div className={`rounded-lg p-3 text-sm flex items-center gap-2 ${status.type === 'success'
-                                ? 'bg-green-50 text-green-700 border border-green-100'
-                                : 'bg-red-50 text-red-700 border border-red-100'
-                            }`}>
-                            <span>{status.type === 'success' ? '✅' : '⚠️'}</span>
+                        <div className={`px-4 py-3 rounded-2xl text-[0.75rem] font-bold tracking-wide flex items-center gap-2 ${
+                            status.type === 'success'
+                                ? 'bg-[#e6f4ea] text-[#1e8e3e]'
+                                : 'bg-[#ffeceb] text-[#d93025]'
+                        }`}>
                             {status.msg}
                         </div>
                     )}
 
-                    {/* Buttons */}
-                    <div className="flex justify-end gap-3 pt-2">
-                        <button
-                            type="button"
-                            onClick={handleClose}
-                            className="px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                            disabled={sending}
-                        >
-                            Cancel
-                        </button>
+                    {/* Actions */}
+                    <div className="flex justify-end pt-6">
                         <button
                             type="submit"
                             disabled={sending || !to || !subject || !body}
-                            className="px-6 py-2.5 bg-black text-white text-sm font-semibold rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                            className="w-full btn-primary !py-4 !rounded-full !text-[0.9rem] disabled:opacity-40 disabled:cursor-not-allowed justify-center shadow-xl hover:shadow-2xl"
                         >
-                            {sending ? (
-                                <>
-                                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                    </svg>
-                                    Sending...
-                                </>
-                            ) : (
-                                <>
-                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                                    </svg>
-                                    Send Email
-                                </>
-                            )}
+                            {sending ? 'Dispatching Protocol...' : 'Dispatch Protocol →'}
                         </button>
                     </div>
                 </form>

@@ -4,7 +4,7 @@ import Navbar from "../components/Navbar";
 import ComposeModal from "../components/ComposeModal";
 import { fetchInbox, fetchMessage, checkInbox } from "../services/api";
 
-export default function Inbox() {
+export default function InboxPage() {
     const navigate = useNavigate();
     const [emails, setEmails] = useState([]);
     const [selectedIds, setSelectedIds] = useState(new Set());
@@ -18,60 +18,46 @@ export default function Inbox() {
     const [newEmailCount, setNewEmailCount] = useState(0);
     const [lastEmailId, setLastEmailId] = useState(null);
 
-
-    // Load emails from API on mount
     useEffect(() => {
-        // Check cache first for instant load
         const cached = sessionStorage.getItem('odin_inbox_data');
         if (cached) {
-            setEmails(JSON.parse(cached));
+            const parsed = JSON.parse(cached);
+            setEmails(parsed);
             setInitialLoading(false);
-            // Track last email ID for polling
-            const parsedCache = JSON.parse(cached);
-            if (parsedCache.length > 0) {
-                setLastEmailId(parsedCache[0].id);
-            }
+            if (parsed.length > 0) setLastEmailId(parsed[0].id);
         } else {
             loadEmails();
         }
     }, []);
 
-    // Polling for new emails every 30 seconds
     useEffect(() => {
-        const pollInterval = setInterval(async () => {
+        const poll = setInterval(async () => {
             try {
                 const result = await checkInbox();
                 if (result.latest_id && lastEmailId && result.latest_id !== lastEmailId) {
                     setNewEmailCount(prev => prev + 1);
                 }
-            } catch (err) {
-                console.log('Polling check failed:', err);
-            }
-        }, 30000); // 30 seconds
-
-        return () => clearInterval(pollInterval);
+            } catch { /* silent fail */ }
+        }, 30000);
+        return () => clearInterval(poll);
     }, [lastEmailId]);
 
     const loadEmails = async (isRefresh = false) => {
         if (!isRefresh) setInitialLoading(true);
-        else setLoading(true); // Show local loading state if refreshing
-
+        else setLoading(true);
         try {
             const data = await fetchInbox();
             if (data.messages) {
                 setEmails(data.messages);
                 sessionStorage.setItem('odin_inbox_data', JSON.stringify(data.messages));
+                if (data.messages.length > 0) setLastEmailId(data.messages[0].id);
             }
-        } catch (error) {
-            console.error("Failed to load inbox:", error);
+        } catch (err) {
+            console.error(err);
         } finally {
             setInitialLoading(false);
             setLoading(false);
         }
-    };
-
-    const handleRefresh = () => {
-        loadEmails(true);
     };
 
     const filteredEmails = useMemo(() => {
@@ -79,13 +65,11 @@ export default function Inbox() {
             (e.subject || "").toLowerCase().includes(query.toLowerCase()) ||
             (e.from || "").toLowerCase().includes(query.toLowerCase())
         );
-
         list.sort((a, b) => {
-            const dateA = new Date(a.date).getTime();
-            const dateB = new Date(b.date).getTime();
-            return sortOrder === "date_desc" ? dateB - dateA : dateA - dateB;
+            const dA = new Date(a.date).getTime();
+            const dB = new Date(b.date).getTime();
+            return sortOrder === "date_desc" ? dB - dA : dA - dB;
         });
-
         return list;
     }, [emails, query, sortOrder]);
 
@@ -95,241 +79,150 @@ export default function Inbox() {
         setSelectedIds(next);
     };
 
-    const openMail = id => {
-        navigate(`/message/${id}`);
-    };
-
+    const openMail = id => navigate(`/message/${id}`);
     const selectAll = () => setSelectedIds(new Set(filteredEmails.map(e => e.id)));
-
-    const clearSelection = () => {
-        setSelectedIds(new Set());
-        setShowDetail(false);
-        setAnalysisResults(null);
-    };
+    const clearSelection = () => { setSelectedIds(new Set()); setShowDetail(false); setAnalysisResults(null); };
 
     const analyzeSelected = async () => {
-        if (!selectedIds.size) return alert("Select at least one email");
+        if (!selectedIds.size) return;
         setLoading(true);
         setShowDetail(true);
         setAnalysisResults(null);
-
         try {
-            const results = await Promise.all(
-                [...selectedIds].map(id => fetchMessage(id))
-            );
+            const results = await Promise.all([...selectedIds].map(id => fetchMessage(id)));
             setAnalysisResults(results);
-        } catch (e) {
-            console.error(e);
-        }
+        } catch (e) { console.error(e); }
         setLoading(false);
     };
 
-    return (
-        <div className="min-h-screen bg-gray-100 font-sans">
-            <Navbar />
+    const priorityColor = p => p === 'HIGH' ? 'bg-[#ffeceb] text-[#d93025]' : p === 'LOW' ? 'bg-[#e6f4ea] text-[#1e8e3e]' : 'bg-[#fef7e0] text-[#f29900]';
 
-            <div className="mx-auto max-w-6xl px-8 py-8">
-                {/* Search & Refresh */}
-                <div className="mx-auto mb-10 max-w-3xl flex gap-4">
-                    <div className="relative flex-1">
+    return (
+        <div className="bg-ethereal min-h-screen font-sans flex flex-col items-center">
+            <Navbar />
+            <div className="blob-3"></div>
+
+            <div className="w-full max-w-4xl px-6 pt-32 pb-24 relative z-10 flex-col flex gap-8">
+                
+                {/* Minimalist Header */}
+                <div className="flex flex-col items-center justify-center text-center animate-fade-up">
+                    <h1 className="font-display text-5xl sm:text-6xl text-gray-900 mb-2" style={{ letterSpacing: '-0.04em' }}>
+                        Inbox Intelligence
+                    </h1>
+                    <p className="text-[#6b6bf9] font-medium tracking-wide">
+                        {filteredEmails.length} messages available
+                    </p>
+                </div>
+
+                {/* Ultra premium search bar layout */}
+                <div className="flex gap-3 justify-center w-full animate-fade-up delay-100">
+                    <div className="relative w-full max-w-lg">
+                        <svg className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
                         <input
-                            className="w-full rounded-xl border px-12 py-3 shadow-sm focus:outline-none focus:ring-2 focus:ring-black/10 transition-all"
-                            placeholder="Search emails..."
+                            className="w-full glass border-0 pl-12 pr-6 py-4 text-[0.95rem] font-medium text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#c2a3ff]/50 transition-all rounded-[32px]"
+                            placeholder="Find people, subjects, or keywords..."
                             value={query}
                             onChange={e => setQuery(e.target.value)}
                         />
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
                     </div>
-
-                    <button
-                        onClick={handleRefresh}
-                        disabled={loading || initialLoading}
-                        className={`px-6 py-3 rounded-xl border bg-white shadow-sm font-medium hover:bg-gray-50 flex items-center gap-2 transition-all ${loading ? 'opacity-75' : ''}`}
-                        title="Refresh Inbox"
-                    >
-                        <span className={loading ? "animate-spin" : ""}>🔄</span>
-                        Refresh
-                    </button>
                 </div>
 
-                {/* Stats */}
-                <div className="mb-8 grid grid-cols-2 gap-4">
-                    <Stat label="Total Emails" value={filteredEmails.length} />
-                    <Stat label="Selected" value={selectedIds.size} active={selectedIds.size > 0} />
+                {/* Action Row */}
+                <div className="flex items-center justify-between animate-fade-up delay-200 px-2">
+                    <div className="flex gap-2">
+                        <button onClick={selectAll} className="pill-badge text-[0.65rem] uppercase tracking-widest text-gray-500 hover:text-gray-900">
+                            Select All
+                        </button>
+                        <button onClick={() => setSortOrder(o => o === 'date_desc' ? 'date_asc' : 'date_desc')} className="pill-badge text-[0.65rem] uppercase tracking-widest text-gray-500 hover:text-gray-900">
+                            Sort: {sortOrder === 'date_desc' ? 'Newest' : 'Oldest'}
+                        </button>
+                        <button onClick={() => loadEmails(true)} disabled={loading} className="pill-badge text-[0.65rem] uppercase tracking-widest text-gray-500 hover:text-gray-900">
+                            Refresh {loading && ' ↺'}
+                        </button>
+                    </div>
                 </div>
 
-                {/* Inbox List */}
-                <div className="overflow-hidden rounded-2xl border bg-white shadow-sm">
+                {/* Glass email list */}
+                <div className="glass overflow-hidden animate-fade-up delay-300 backdrop-blur-3xl shadow-[0_12px_48px_rgba(0,0,0,0.06)] border border-white/60">
                     {initialLoading ? (
-                        <div className="p-12 text-center text-gray-500 flex flex-col items-center gap-3">
-                            <div className="text-2xl animate-spin">⏳</div>
-                            <div>Loading your inbox...</div>
+                        <div className="py-32 flex flex-col items-center justify-center">
+                            <div className="w-10 h-10 border-2 border-[#ff9b5e] border-t-transparent rounded-full animate-spin mb-4"></div>
+                            <p className="font-display text-2xl text-gray-400">Loading your world...</p>
                         </div>
                     ) : filteredEmails.length === 0 ? (
-                        <div className="p-12 text-center text-gray-500">
-                            <div className="mb-2 text-2xl">📭</div>
-                            No emails found
+                        <div className="py-32 flex flex-col items-center justify-center text-center">
+                            <span className="text-4xl mb-4 opacity-50">📭</span>
+                            <p className="font-display text-2xl text-gray-400">Your inbox is clear.</p>
                         </div>
                     ) : (
-                        filteredEmails.map(mail => {
-                            const selected = selectedIds.has(mail.id);
-                            return (
-                                <div
-                                    key={mail.id}
-                                    className={`flex gap-4 p-6 border-b cursor-pointer transition-all animate-in slide-in-from-bottom-2 duration-500
-                    ${selected ? "bg-gray-50" : "hover:bg-gray-50 hover:shadow-sm"}`}
-                                    onClick={() => openMail(mail.id)}
-                                >
-                                    <input
-                                        type="checkbox"
-                                        checked={selected}
-                                        onChange={() => toggleSelect(mail.id)}
-                                        onClick={e => e.stopPropagation()}
-                                        className="mt-1 h-5 w-5 rounded border-gray-300 text-black focus:ring-black cursor-pointer"
-                                    />
-                                    <div className="flex-1">
-                                        <div className="mb-1 flex justify-between items-center">
-                                            <span className="font-semibold text-gray-900">{mail.from}</span>
-                                            <span className="text-sm text-gray-400">{mail.date}</span>
+                        <div className="divide-y divide-black/[0.04]">
+                            {filteredEmails.map((mail, idx) => {
+                                const selected = selectedIds.has(mail.id);
+                                return (
+                                    <div
+                                        key={mail.id}
+                                        className={`flex items-start gap-5 px-6 sm:px-8 py-6 cursor-pointer transition-all duration-300 hover:bg-white/40 ${
+                                            selected ? 'bg-white/60' : ''
+                                        }`}
+                                        onClick={() => openMail(mail.id)}
+                                    >
+                                        <div className="pt-1">
+                                            <input
+                                                type="checkbox"
+                                                checked={selected}
+                                                onChange={() => toggleSelect(mail.id)}
+                                                onClick={e => e.stopPropagation()}
+                                                className="w-4 h-4 rounded-md border-gray-300 text-[#a3c2ff] focus:ring-[#a3c2ff] transition-all cursor-pointer"
+                                            />
                                         </div>
-                                        <h3 className="font-medium text-gray-800 mb-1">{mail.subject}</h3>
-                                        <p className="text-sm text-gray-500 line-clamp-1">{mail.snippet}</p>
-
-                                        {mail.has_attachments && (
-                                            <div className="mt-2 flex gap-2">
-                                                {mail.attachments?.slice(0, 3).map((att, i) => (
-                                                    <span key={i} className="inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-1 text-xs text-gray-600 border border-gray-200">
-                                                        📎 {att.filename?.length > 20 ? att.filename.substring(0, 20) + '...' : att.filename}
-                                                    </span>
-                                                ))}
-                                                {mail.attachments?.length > 3 && <span className="text-xs text-gray-400 self-center">+{mail.attachments.length - 3} more</span>}
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex justify-between items-baseline mb-1">
+                                                <h3 className="font-semibold text-gray-900 text-[0.95rem] truncate pr-4">{mail.from}</h3>
+                                                <span className="text-[0.65rem] font-bold tracking-widest uppercase text-gray-400 flex-shrink-0">
+                                                    {new Date(mail.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                                </span>
                                             </div>
-                                        )}
+                                            <h4 className="font-medium text-gray-700 text-[0.9rem] mb-1.5 truncate">{mail.subject}</h4>
+                                            <p className="text-[0.85rem] text-gray-500 line-clamp-2 leading-relaxed opacity-80">{mail.snippet}</p>
+                                        </div>
                                     </div>
-                                </div>
-                            );
-                        })
+                                );
+                            })}
+                        </div>
                     )}
                 </div>
+            </div>
 
-                {/* Floating Action Bar */}
-                {selectedIds.size > 0 && (
-                    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex gap-4 rounded-xl bg-black px-6 py-3 shadow-xl items-center animate-in slide-in-from-bottom-5 fade-in duration-300">
-                        <span className="text-white text-sm font-medium">{selectedIds.size} selected</span>
-                        <div className="h-4 w-px bg-gray-700"></div>
-                        <button onClick={analyzeSelected} className="text-sm font-semibold text-white hover:text-gray-200 transition-colors">
-                            Analyze
+            {/* Smart selection floating action bar */}
+            {selectedIds.size > 0 && (
+                <div className="fixed bottom-12 left-1/2 -translate-x-1/2 z-50 animate-fade-up">
+                    <div className="glass-dark px-8 py-4 flex items-center gap-6 rounded-full shadow-[0_20px_60px_rgba(0,0,0,0.3)] border border-white/20">
+                        <span className="text-white text-sm font-medium tracking-wide">
+                            <strong className="text-[#a3c2ff]">{selectedIds.size}</strong> selected
+                        </span>
+                        <div className="w-px h-6 bg-white/20" />
+                        <button onClick={analyzeSelected} className="flex items-center gap-2 text-sm font-bold tracking-wide text-white hover:text-[#c2a3ff] transition-all">
+                            ✦ Analyze with AI
                         </button>
-                        <button onClick={clearSelection} className="text-sm text-gray-400 hover:text-white transition-colors">
+                        <button onClick={clearSelection} className="text-xs font-bold uppercase tracking-widest text-gray-400 hover:text-white transition-all ml-2">
                             Clear
                         </button>
                     </div>
-                )}
-
-                {/* Analysis Panel */}
-                {showDetail && (
-                    <div className="fixed bottom-0 left-0 right-0 z-40 flex justify-center pointer-events-none p-4">
-                        <div className="pointer-events-auto bg-white border shadow-2xl rounded-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col animate-in slide-in-from-bottom duration-300 ring-1 ring-black/5">
-                            <div className="p-6 border-b flex items-center justify-between bg-white sticky top-0 z-10">
-                                <h2 className="text-xl font-bold tracking-tight">AI Analysis Results</h2>
-                                <button onClick={() => setShowDetail(false)} className="rounded-full p-2 hover:bg-gray-100 transition-colors text-gray-500">
-                                    ✕
-                                </button>
-                            </div>
-
-                            <div className="p-8 overflow-y-auto bg-gray-50">
-                                {loading ? (
-                                    <div className="flex flex-col items-center justify-center py-12 gap-4 text-gray-500">
-                                        <div className="animate-spin text-2xl">⏳</div>
-                                        <span className="font-medium">ODIN is analyzing {selectedIds.size} emails...</span>
-                                    </div>
-                                ) : analysisResults ? (
-                                    <div className="space-y-6">
-                                        {analysisResults.map((d, i) => (
-                                            <div key={d.id || i} className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm hover:shadow-md transition-shadow">
-                                                <h3 className="font-bold text-lg mb-4 text-gray-900">{d.subject || "No Subject"}</h3>
-
-                                                <div className="flex gap-3 mb-4 flex-wrap">
-                                                    <span className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide border ${d.priority === 'HIGH' ? 'bg-red-50 text-red-700 border-red-200' :
-                                                        d.priority === 'LOW' ? 'bg-green-50 text-green-700 border-green-200' :
-                                                            'bg-amber-50 text-amber-700 border-amber-200'
-                                                        }`}>
-                                                        {d.priority || 'Medium'}
-                                                    </span>
-                                                    <span className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide border ${d.sentiment === 'positive' ? 'bg-green-50 text-green-700 border-green-200' :
-                                                        d.sentiment === 'negative' ? 'bg-red-50 text-red-700 border-red-200' :
-                                                            'bg-gray-50 text-gray-700 border-gray-200'
-                                                        }`}>
-                                                        {d.sentiment || 'Neutral'}
-                                                    </span>
-                                                </div>
-
-                                                <div className="bg-gray-50 rounded-lg p-5 text-sm text-gray-700 leading-relaxed border border-gray-100">
-                                                    {d.summary}
-                                                </div>
-
-                                                {d.extracted_info?.action_items?.length > 0 && (
-                                                    <div className="mt-5">
-                                                        <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Action Items</h4>
-                                                        <ul className="space-y-2">
-                                                            {d.extracted_info.action_items.map((item, idx) => (
-                                                                <li key={idx} className="flex gap-2 text-sm text-gray-700">
-                                                                    <span className="text-blue-500">•</span>
-                                                                    {item}
-                                                                </li>
-                                                            ))}
-                                                        </ul>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="text-center py-12 text-red-500">Failed to load analysis.</div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                )}
-            </div>
-
-            {/* Floating Compose Button (FAB) */}
-            <button
-                onClick={() => setComposeOpen(true)}
-                className="fixed bottom-6 right-6 z-50 w-14 h-14 bg-black text-white rounded-full shadow-xl hover:bg-gray-800 transition-all hover:scale-110 flex items-center justify-center"
-                title="Compose new email"
-            >
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-            </button>
-
-            {/* New Email Notification Badge */}
-            {newEmailCount > 0 && (
-                <div
-                    className="fixed top-20 right-6 z-50 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 animate-fade-in cursor-pointer"
-                    onClick={() => {
-                        setNewEmailCount(0);
-                        loadEmails(true);
-                    }}
-                >
-                    <span>📬</span>
-                    <span className="font-medium">{newEmailCount} new email{newEmailCount > 1 ? 's' : ''}</span>
-                    <span className="text-blue-200">Click to refresh</span>
                 </div>
             )}
 
-            {/* Compose Modal */}
-            <ComposeModal isOpen={composeOpen} onClose={() => setComposeOpen(false)} />
-        </div>
-    );
-}
+            {/* New email FAB matching "Experience Sarvam" black button style */}
+            <button
+                onClick={() => setComposeOpen(true)}
+                className="fixed bottom-10 right-10 z-50 w-16 h-16 rounded-full flex items-center justify-center text-white text-2xl cursor-pointer hover:scale-105 active:scale-95 transition-all shadow-[0_12px_32px_rgba(0,0,0,0.2)]"
+                style={{ background: 'linear-gradient(180deg, #2a2a2a 0%, #111 100%)' }}
+            >
+                +
+            </button>
 
-function Stat({ label, value, active }) {
-    return (
-        <div className={`rounded-xl border p-6 text-center shadow-sm transition-colors ${active ? "bg-black text-white border-black" : "bg-white border-gray-200"}`}>
-            <h3 className="text-3xl font-bold tracking-tight">{value}</h3>
-            <p className={`text-sm font-medium uppercase tracking-wider mt-1 ${active ? "text-gray-400" : "text-gray-500"}`}>{label}</p>
+            <ComposeModal isOpen={composeOpen} onClose={() => setComposeOpen(false)} />
         </div>
     );
 }
