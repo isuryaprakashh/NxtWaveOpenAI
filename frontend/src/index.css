@@ -120,19 +120,19 @@ body {
 
 /* ===== Micro-interactions & Buttons ===== */
 .pill-badge {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  padding: 0.4rem 1rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(0,0,0,0.05);
+  box-shadow: 0 4px 20px -5px rgba(0,0,0,0.05);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 20px;
-  border-radius: 999px;
-  font-family: var(--font-body);
-  font-size: 0.8rem;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(16px);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 1),
-              0 2px 12px rgba(0, 0, 0, 0.06);
+  gap: 0.4rem;
   color: #4a4a4a;
   transition: all 0.3s ease;
 }
@@ -195,7 +195,18 @@ body {
   from { opacity: 0; transform: translateY(30px); filter: blur(4px); }
   to   { opacity: 1; transform: translateY(0); filter: blur(0); }
 }
+
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
 .animate-fade-up { animation: fadeUpSmooth 1s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-marquee {
+  display: flex;
+  width: max-content;
+  animation: marquee 40s linear infinite;
+}
 .delay-100 { animation-delay: 0.1s; }
 .delay-200 { animation-delay: 0.2s; }
 .delay-300 { animation-delay: 0.3s; }

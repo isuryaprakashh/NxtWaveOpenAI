@@ -1,149 +1,110 @@
 """
-Database module for storing email metadata and analytics.
-Uses SQLite for persistent storage.
+MongoDB Database module for storing email metadata and analytics.
+Optimized for JSON-native data and performance.
 """
-import sqlite3
+import os
 import json
 from datetime import datetime
-from pathlib import Path
 from typing import Dict, List, Optional
+from pymongo import MongoClient, UpdateOne, ASCENDING, DESCENDING
+from pymongo.errors import ConnectionFailure
 
-DB_PATH = Path("./email_data.db")
+# MongoDB Configuration
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
+DB_NAME = os.getenv("MONGO_DB_NAME", "odin_email_db")
 
+_client = None
 
-def get_db_connection() -> sqlite3.Connection:
-    """
-    Get a database connection with row factory enabled.
-    
-    Returns:
-        SQLite connection with Row factory for dict-like access
-    """
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
-
+def get_db():
+    """Get MongoDB database instance with lazy initialization and connection pooling."""
+    global _client
+    if _client is None:
+        try:
+            _client = MongoClient(MONGO_URI, maxPoolSize=50)
+            # Verify connection
+            _client.admin.command('ping')
+        except ConnectionFailure as e:
+            print(f"Could not connect to MongoDB: {e}")
+            raise
+    return _client[DB_NAME]
 
 def init_db() -> None:
-    """Initialize the database with required tables."""
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    """Initialize MongoDB with required indexes for efficiency."""
+    db = get_db()
+    emails = db.emails
     
-    # Create emails table
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS emails (
-            id TEXT PRIMARY KEY,
-            user_id TEXT,
-            subject TEXT,
-            sender TEXT,
-            date TEXT,
-            snippet TEXT,
-            body TEXT,
-            summary TEXT,
-            priority TEXT,
-            sentiment TEXT,
-            sentiment_score REAL,
-            category TEXT,
-            processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
+    # Create unique index on email ID
+    emails.create_index([("id", ASCENDING)], unique=True)
     
-    # Add summary column if it doesn't exist (migration for existing DBs)
-    try:
-        cursor.execute('ALTER TABLE emails ADD COLUMN summary TEXT')
-    except sqlite3.OperationalError:
-        pass  # Column already exists
+    # Create index on user_id for fast retrieval of user data
+    emails.create_index([("user_id", ASCENDING)])
     
-    # Create index on user_id for faster queries
-    cursor.execute('''
-        CREATE INDEX IF NOT EXISTS idx_emails_user_id ON emails(user_id)
-    ''')
+    # Create index on subject, sender, and snippet for text search
+    # MongoDB Text Index allows for efficient searching across multiple fields
+    emails.create_index([
+        ("subject", "text"),
+        ("sender", "text"),
+        ("snippet", "text"),
+        ("body", "text")
+    ], name="email_text_search")
     
-    # Create extracted_info table
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS extracted_info (
-            email_id TEXT,
-            info_type TEXT,
-            info_value TEXT,
-            FOREIGN KEY (email_id) REFERENCES emails(id)
-        )
-    ''')
-    
-    conn.commit()
-    conn.close()
-
+    # TTL Index can be added if we want automatic cache expiration, 
+    # but for now we'll keep it persistent.
+    print(f"MongoDB initialized: {DB_NAME}")
 
 def save_email_analysis(email_data: Dict) -> bool:
     """
-    Save email and its AI analysis to database.
-    
-    Args:
-        email_data: Dictionary containing email data and analysis
-        
-    Returns:
-        True if saved successfully, False otherwise
+    Save or update email and its AI analysis to MongoDB.
+    Highly efficient: embeds everything in one document.
     """
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
+    db = get_db()
     try:
-        cursor.execute('''
-            INSERT OR REPLACE INTO emails 
-            (id, user_id, subject, sender, date, snippet, body, summary, priority, sentiment, sentiment_score, category)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            email_data.get('id'),
-            email_data.get('user_id'),
-            email_data.get('subject'),
-            email_data.get('sender'),
-            email_data.get('date'),
-            email_data.get('snippet'),
-            email_data.get('body'),
-            email_data.get('summary'),
-            email_data.get('priority'),
-            email_data.get('sentiment'),
-            email_data.get('sentiment_score'),
-            email_data.get('category')
-        ))
+        # Standardize data types
+        payload = email_data.copy()
         
-        # Save extracted information
-        if 'extracted_info' in email_data:
-            info = email_data['extracted_info']
-            email_id = email_data.get('id')
-            
-            # Clear old extracted info for this email
-            cursor.execute('DELETE FROM extracted_info WHERE email_id = ?', (email_id,))
-            
-            for email in info.get('emails', []):
-                cursor.execute('INSERT INTO extracted_info VALUES (?, ?, ?)', (email_id, 'email', email))
-            for phone in info.get('phones', []):
-                cursor.execute('INSERT INTO extracted_info VALUES (?, ?, ?)', (email_id, 'phone', phone))
-            for date in info.get('dates', []):
-                cursor.execute('INSERT INTO extracted_info VALUES (?, ?, ?)', (email_id, 'date', date))
-            for action in info.get('action_items', []):
-                cursor.execute('INSERT INTO extracted_info VALUES (?, ?, ?)', (email_id, 'action_item', action))
+        # Ensure primitive types for top-level fields
+        def ensure_str(val): return str(val) if val is not None else ""
         
-        conn.commit()
+        # Consistent summary handling (ensure it's a string as per previous fixes)
+        summary = payload.get('summary', "")
+        if isinstance(summary, list):
+            summary = "\n".join([str(s) for s in summary])
+        
+        # Prepare the document
+        doc = {
+            "id": ensure_str(payload.get('id')),
+            "user_id": ensure_str(payload.get('user_id')),
+            "subject": ensure_str(payload.get('subject')),
+            "sender": ensure_str(payload.get('sender')),
+            "recipient": ensure_str(payload.get('to')),
+            "date": ensure_str(payload.get('date')),
+            "snippet": ensure_str(payload.get('snippet')),
+            "body": ensure_str(payload.get('body')),
+            "summary": summary,
+            "priority": ensure_str(payload.get('priority', "MEDIUM")),
+            "sentiment": ensure_str(payload.get('sentiment', "neutral")),
+            "sentiment_score": float(payload.get('sentiment_score', 0.5)),
+            "category": ensure_str(payload.get('category', "General")),
+            "extracted_info": payload.get('extracted_info', {}), # Nested JSON is native to Mongo
+            "processed_at": datetime.utcnow()
+        }
+
+        # Upsert: Update if exists, insert if not
+        db.emails.update_one(
+            {"id": doc["id"]},
+            {"$set": doc},
+            upsert=True
+        )
         return True
     except Exception as e:
-        print(f"Error saving email: {e}")
+        print(f"Error saving to MongoDB: {e}")
         return False
-    finally:
-        conn.close()
-
 
 def get_analytics(user_id: str) -> Dict:
     """
-    Get analytics data for dashboard.
-    
-    Args:
-        user_id: The user's unique identifier
-        
-    Returns:
-        Dictionary containing analytics data
+    Get analytics data using MongoDB aggregation framework for maximum efficiency.
     """
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
+    db = get_db()
     analytics = {
         'total_emails': 0,
         'priority_distribution': {'HIGH': 0, 'MEDIUM': 0, 'LOW': 0},
@@ -151,184 +112,116 @@ def get_analytics(user_id: str) -> Dict:
         'category_distribution': {},
         'recent_emails': []
     }
-    
+
     try:
-        # Total emails
-        cursor.execute('SELECT COUNT(*) FROM emails WHERE user_id = ?', (user_id,))
-        result = cursor.fetchone()
-        analytics['total_emails'] = result[0] if result else 0
-        
-        # Priority distribution
-        cursor.execute('SELECT priority, COUNT(*) FROM emails WHERE user_id = ? GROUP BY priority', (user_id,))
-        for row in cursor.fetchall():
-            priority, count = row[0], row[1]
-            if priority:
-                analytics['priority_distribution'][priority] = count
-        
-        # Sentiment distribution
-        cursor.execute('SELECT sentiment, COUNT(*) FROM emails WHERE user_id = ? GROUP BY sentiment', (user_id,))
-        for row in cursor.fetchall():
-            sentiment, count = row[0], row[1]
-            if sentiment:
-                analytics['sentiment_distribution'][sentiment] = count
-        
-        # Category distribution
-        cursor.execute('SELECT category, COUNT(*) FROM emails WHERE user_id = ? GROUP BY category', (user_id,))
-        for row in cursor.fetchall():
-            category, count = row[0], row[1]
-            if category:
-                analytics['category_distribution'][category] = count
-        
-        # Recent emails
-        cursor.execute('''
-            SELECT id, subject, sender, priority, sentiment, category, processed_at 
-            FROM emails WHERE user_id = ? 
-            ORDER BY processed_at DESC LIMIT 10
-        ''', (user_id,))
-        analytics['recent_emails'] = [
-            {
-                'id': row['id'],
-                'subject': row['subject'],
-                'sender': row['sender'],
-                'priority': row['priority'],
-                'sentiment': row['sentiment'],
-                'category': row['category'],
-                'processed_at': row['processed_at']
-            }
-            for row in cursor.fetchall()
+        # 1. Total Count
+        analytics['total_emails'] = db.emails.count_documents({"user_id": user_id})
+
+        # 2. Distributions using Aggregation
+        pipeline = [
+            {"$match": {"user_id": user_id}},
+            {"$facet": {
+                "priority": [{"$group": {"_id": "$priority", "count": {"$sum": 1}}}],
+                "sentiment": [{"$group": {"_id": "$sentiment", "count": {"$sum": 1}}}],
+                "category": [{"$group": {"_id": "$category", "count": {"$sum": 1}}}]
+            }}
         ]
         
+        results = list(db.emails.aggregate(pipeline))[0]
+
+        for p in results['priority']:
+            if p['_id'] in analytics['priority_distribution']:
+                analytics['priority_distribution'][p['_id']] = p['count']
+        
+        for s in results['sentiment']:
+            if s['_id'] in analytics['sentiment_distribution']:
+                analytics['sentiment_distribution'][s['_id']] = s['count']
+        
+        for c in results['category']:
+            if c['_id']:
+                analytics['category_distribution'][c['_id']] = c['count']
+
+        # 3. Recent Emails
+        recent = db.emails.find(
+            {"user_id": user_id},
+            {"id": 1, "subject": 1, "sender": 1, "priority": 1, "sentiment": 1, "category": 1, "processed_at": 1}
+        ).sort("processed_at", DESCENDING).limit(10)
+
+        for r in recent:
+            r['processed_at'] = r['processed_at'].isoformat()
+            if '_id' in r: del r['_id']
+            analytics['recent_emails'].append(r)
+
     except Exception as e:
-        print(f"Error getting analytics: {e}")
-    finally:
-        conn.close()
+        print(f"Error fetching analytics from MongoDB: {e}")
     
     return analytics
 
-
 def search_emails(query_text: str, user_id: str, limit: int = 20) -> List[Dict]:
     """
-    Search emails by keyword in subject, body, or sender.
-    
-    Args:
-        query_text: The search query
-        user_id: The user's unique identifier (REQUIRED for security)
-        limit: Maximum number of results to return
-        
-    Returns:
-        List of matching email dictionaries
+    Search emails using MongoDB's text search or partial matching.
     """
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    wildcard_query = f"%{query_text}%"
-    
+    db = get_db()
     try:
-        cursor.execute("""
-            SELECT id, subject, sender, date, snippet, body
-            FROM emails
-            WHERE user_id = ?
-              AND (subject LIKE ? 
-                   OR body LIKE ? 
-                   OR sender LIKE ?
-                   OR snippet LIKE ?)
-            ORDER BY date DESC
-            LIMIT ?
-        """, (user_id, wildcard_query, wildcard_query, wildcard_query, wildcard_query, limit))
+        # Using regex for partial matching (more flexible for partial words)
+        query = {
+            "user_id": user_id,
+            "$or": [
+                {"subject": {"$regex": query_text, "$options": "i"}},
+                {"body": {"$regex": query_text, "$options": "i"}},
+                {"sender": {"$regex": query_text, "$options": "i"}},
+                {"snippet": {"$regex": query_text, "$options": "i"}}
+            ]
+        }
         
-        results = []
-        for row in cursor.fetchall():
-            results.append({
-                "id": row["id"],
-                "subject": row["subject"],
-                "sender": row["sender"],
-                "date": row["date"],
-                "snippet": row["snippet"],
-                "body": row["body"]
-            })
-        return results
+        results = db.emails.find(query).limit(limit).sort("processed_at", DESCENDING)
+        
+        email_list = []
+        for r in results:
+            if '_id' in r: del r['_id']
+            # Convert datetime to string for JSON serialization
+            if 'processed_at' in r: r['processed_at'] = r['processed_at'].isoformat()
+            email_list.append(r)
+        return email_list
     except Exception as e:
-        print(f"Error searching emails: {e}")
+        print(f"Error searching MongoDB: {e}")
         return []
-    finally:
-        conn.close()
-
 
 def get_email_by_id(email_id: str, user_id: Optional[str] = None) -> Optional[Dict]:
-    """
-    Retrieve email data from database.
-    
-    Args:
-        email_id: The email's unique identifier
-        user_id: Optional user_id for access control
-        
-    Returns:
-        Email data dictionary or None if not found
-    """
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    """Retrieve email from MongoDB."""
+    db = get_db()
+    query = {"id": email_id}
+    if user_id:
+        query["user_id"] = user_id
     
     try:
-        if user_id:
-            cursor.execute('SELECT * FROM emails WHERE id = ? AND user_id = ?', (email_id, user_id))
-        else:
-            cursor.execute('SELECT * FROM emails WHERE id = ?', (email_id,))
-        
-        row = cursor.fetchone()
-        if row:
-            return {
-                'id': row['id'],
-                'user_id': row['user_id'],
-                'subject': row['subject'],
-                'sender': row['sender'],
-                'date': row['date'],
-                'snippet': row['snippet'],
-                'body': row['body'],
-                'summary': row['summary'] if 'summary' in row.keys() else None,
-                'priority': row['priority'],
-                'sentiment': row['sentiment'],
-                'sentiment_score': row['sentiment_score'],
-                'category': row['category'],
-                'processed_at': row['processed_at']
-            }
+        res = db.emails.find_one(query)
+        if res:
+            if '_id' in res: del res['_id']
+            # Map 'recipient' back to 'to' for frontend compatibility if needed
+            if 'recipient' in res: res['to'] = res['recipient']
+            if 'processed_at' in res: res['processed_at'] = res['processed_at'].isoformat()
+            return res
     except Exception as e:
-        print(f"Error retrieving email: {e}")
-    finally:
-        conn.close()
-    
+        print(f"Error getting email from MongoDB: {e}")
     return None
 
-
 def delete_email_by_id(email_id: str, user_id: Optional[str] = None) -> bool:
-    """
-    Delete email data from database.
-    
-    Args:
-        email_id: The email's unique identifier
-        user_id: Optional user_id for access control
+    """Delete email from MongoDB."""
+    db = get_db()
+    query = {"id": email_id}
+    if user_id:
+        query["user_id"] = user_id
         
-    Returns:
-        True if deleted successfully, False otherwise
-    """
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
     try:
-        if user_id:
-            cursor.execute('DELETE FROM emails WHERE id = ? AND user_id = ?', (email_id, user_id))
-            cursor.execute('DELETE FROM extracted_info WHERE email_id = ?', (email_id,))
-        else:
-            cursor.execute('DELETE FROM emails WHERE id = ?', (email_id,))
-            cursor.execute('DELETE FROM extracted_info WHERE email_id = ?', (email_id,))
-        
-        conn.commit()
-        return cursor.rowcount > 0
+        res = db.emails.delete_one(query)
+        return res.deleted_count > 0
     except Exception as e:
-        print(f"Error deleting email: {e}")
+        print(f"Error deleting from MongoDB: {e}")
         return False
-    finally:
-        conn.close()
 
-
-# Initialize database on import
-init_db()
+# Initialize on import
+try:
+    init_db()
+except Exception:
+    pass # Might fail if server isn't running yet, app.py will handle it

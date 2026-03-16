@@ -19,12 +19,14 @@ export default function Navbar() {
         return () => window.removeEventListener('scroll', handleScroll);
     }, []);
 
-    const isActive = (path) => location.pathname === path;
+    const isActive = (path) => {
+        if (path === '/inbox') return location.pathname === '/inbox' || location.pathname === '/sent';
+        return location.pathname === path;
+    };
 
     const navLinks = [
-        { path: '/inbox', label: 'INBOX' },
+        { path: '/inbox', label: 'MAIL' },
         { path: '/chat', label: 'CHAT' },
-        { path: '/analytics', label: 'ANALYTICS' },
     ];
 
     return (
@@ -45,7 +47,7 @@ export default function Navbar() {
 
                 {/* Center Links (Matching "PLATFORM > DEVELOPERS > BLOGS") */}
                 <div className="flex-1 hidden md:flex items-center justify-center gap-10">
-                    {navLinks.map((link) => (
+                    {isAuthenticated && navLinks.map((link) => (
                         <Link
                             key={link.path}
                             to={link.path}
@@ -70,15 +72,13 @@ export default function Navbar() {
                     {isAuthenticated ? (
                         <a 
                             href="/logout" 
-                            onClick={() => {
+                            onClick={(e) => {
+                                e.preventDefault();
                                 // Clear all cached data before logout
-                                sessionStorage.removeItem('odin_inbox_data');
-                                sessionStorage.removeItem('odin_user_id');
-                                Object.keys(localStorage).forEach(key => {
-                                    if (key.startsWith('email_draft_')) {
-                                        localStorage.removeItem(key);
-                                    }
-                                });
+                                sessionStorage.clear();
+                                localStorage.clear(); // Complete wipe for clean logout
+                                // Now proceed to backend logout
+                                window.location.href = "/logout";
                             }}
                             className="btn-primary !bg-none !bg-gray-100 hover:!bg-gray-200 !text-gray-700 !px-5 !py-2.5 !text-[0.75rem] !font-bold uppercase tracking-wider !shadow-none"
                         >
@@ -95,9 +95,11 @@ export default function Navbar() {
                 </div>
                 
                 {/* Mobile placeholder */}
-                <div className="md:hidden flex items-center">
-                    <span className="text-xs font-bold uppercase tracking-widest text-gray-500">Menu</span>
-                </div>
+                {isAuthenticated && (
+                    <div className="md:hidden flex items-center">
+                        <span className="text-xs font-bold uppercase tracking-widest text-gray-500">Menu</span>
+                    </div>
+                )}
             </div>
         </nav>
     );

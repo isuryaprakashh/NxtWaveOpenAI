@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import Navbar from '../components/Navbar';
 import { sendChatQuery } from '../services/api';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 export default function ChatPage() {
     const [messages, setMessages] = useState([]);
@@ -9,7 +11,9 @@ export default function ChatPage() {
     const messagesEndRef = useRef(null);
 
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        if (messages.length > 0) {
+            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }
     }, [messages]);
 
     async function handleSubmit(e) {
@@ -50,18 +54,8 @@ export default function ChatPage() {
             <Navbar />
             <div className="blob-3"></div>
 
-            <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full px-6 pt-32 md:pt-[280px] pb-6 relative z-10 transition-all duration-300">
+            <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full px-6 pt-32 pb-6 relative z-10 transition-all duration-300">
                 
-                {/* Header */}
-                <div className="mb-8 text-center animate-fade-up shrink-0">
-                    <h1 className="font-display text-[4rem] sm:text-[5rem] tracking-tight text-gray-900 leading-none mb-2">
-                        Omniscient Dialogue
-                    </h1>
-                    <p className="text-[0.65rem] font-bold uppercase tracking-widest text-[#a3c2ff]">
-                        Conversational Intelligence Interface
-                    </p>
-                </div>
-
                 {/* Glass Chat Interface */}
                 <div className="flex-1 flex flex-col glass animate-fade-up delay-100 shadow-[0_24px_80px_rgba(0,0,0,0.08)] border border-white/60 mb-2 min-h-[600px]">
                     
@@ -105,7 +99,32 @@ export default function ChatPage() {
                                                 ? 'bg-[#ffeceb] text-[#d93025] border border-[#f5c6c4] rounded-[24px] rounded-tl-sm'
                                                 : 'glass !bg-white/80 text-gray-800 rounded-[24px] rounded-tl-sm border border-white/60'
                                     }`}>
-                                        <p className="whitespace-pre-wrap">{msg.content}</p>
+                                        {msg.role === 'assistant' ? (
+                                            <div className="markdown-body text-[0.95rem] leading-relaxed break-words">
+                                                <ReactMarkdown
+                                                    remarkPlugins={[remarkGfm]}
+                                                    components={{
+                                                        p: ({node, ...props}) => <p className="mb-4 last:mb-0" {...props} />,
+                                                        ul: ({node, ...props}) => <ul className="list-disc pl-6 mb-4 space-y-1 marker:text-[#a3c2ff]" {...props} />,
+                                                        ol: ({node, ...props}) => <ol className="list-decimal pl-6 mb-4 space-y-1 marker:text-gray-400 font-bold" {...props} />,
+                                                        li: ({node, ...props}) => <li className="pl-1" {...props} />,
+                                                        strong: ({node, ...props}) => <strong className="font-bold text-black" {...props} />,
+                                                        a: ({node, ...props}) => <a className="text-[#6b6bf9] hover:text-[#4b4be9] underline underline-offset-2 break-all font-semibold transition-colors" target="_blank" rel="noopener noreferrer" {...props} />,
+                                                        h1: ({node, ...props}) => <h1 className="text-xl font-display font-bold text-black mb-4 mt-6 first:mt-0 tracking-tight" {...props} />,
+                                                        h2: ({node, ...props}) => <h2 className="text-lg font-display font-bold text-gray-900 mb-3 mt-5 tracking-tight" {...props} />,
+                                                        h3: ({node, ...props}) => <h3 className="text-[1.05rem] font-bold text-gray-800 mb-2 mt-4" {...props} />,
+                                                        code: ({node, inline, ...props}) => 
+                                                            inline ? <code className="px-1.5 py-0.5 bg-gray-100 rounded-md text-[0.85rem] font-mono text-gray-800" {...props} /> 
+                                                                   : <pre className="bg-gray-900 text-gray-100 p-4 rounded-xl overflow-x-auto text-[0.85rem] font-mono mb-4"><code {...props} /></pre>,
+                                                        blockquote: ({node, ...props}) => <blockquote className="border-l-4 border-[#c2a3ff] pl-4 py-1 italic text-gray-600 bg-gray-50/50 rounded-r-lg mb-4" {...props} />
+                                                    }}
+                                                >
+                                                    {msg.content}
+                                                </ReactMarkdown>
+                                            </div>
+                                        ) : (
+                                            <p className="whitespace-pre-wrap">{msg.content}</p>
+                                        )}
                                         
                                         {msg.sources?.length > 0 && (
                                             <div className="mt-5 pt-4 border-t border-gray-200/50">

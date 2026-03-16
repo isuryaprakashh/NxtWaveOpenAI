@@ -24,9 +24,14 @@ export const checkAuth = () => fetchJSON('/api/auth/check').catch(() => ({ authe
 export const logout = () => fetch('/logout', { credentials: 'include' });
 
 // Inbox APIs
-export const fetchInbox = (query = '') => {
-    const params = query ? `?q=${encodeURIComponent(query)}` : '';
-    return fetchJSON(`/api/inbox${params}`);
+export const fetchInbox = (query = '', pageToken = '', folder = 'inbox') => {
+    const params = new URLSearchParams();
+    if (query) params.set('q', query);
+    if (pageToken) params.set('pageToken', pageToken);
+    if (folder) params.set('folder', folder);
+    
+    const queryString = params.toString();
+    return fetchJSON(`/api/inbox${queryString ? '?' + queryString : ''}`);
 };
 
 // Message APIs
@@ -59,9 +64,6 @@ export const getAttachmentUrl = (messageId, attachmentId, filename, mimeType) =>
     return `/api/attachment/${messageId}/${attachmentId}?${params}`;
 };
 
-// Analytics API
-export const fetchAnalytics = () => fetchJSON('/api/analytics');
-
 // Chat API
 export const sendChatQuery = (question) =>
     fetchJSON('/api/chat', {
@@ -70,10 +72,16 @@ export const sendChatQuery = (question) =>
     });
 
 // Compose Email API
-export const composeEmail = (to, subject, body) =>
+export const composeEmail = (to, subject, body, attachments = []) =>
     fetchJSON('/api/compose', {
         method: 'POST',
-        body: JSON.stringify({ to, subject, body }),
+        body: JSON.stringify({ to, subject, body, attachments }),
+    });
+
+// Delete Email API
+export const deleteEmail = (id) =>
+    fetchJSON(`/api/message/${id}/delete`, {
+        method: 'POST',
     });
 
 // Inbox Check API (for polling)

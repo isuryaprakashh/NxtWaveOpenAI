@@ -18,6 +18,9 @@ from dotenv import load_dotenv
 load_dotenv()
 from base64 import urlsafe_b64decode, urlsafe_b64encode
 from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
 
 from openai_helpers import (
     analyze_email_comprehensive, 
@@ -38,8 +41,8 @@ app = Flask(__name__)
 SECRET_KEY = os.getenv("FLASK_SECRET_KEY")
 if not SECRET_KEY:
     if DEBUG:
-        SECRET_KEY = "dev-secret-key-do-not-use-in-production"
-        print("WARNING: Using development secret key. Set FLASK_SECRET_KEY in production!")
+        SECRET_KEY = os.urandom(24).hex()
+        print("WARNING: Using random development secret key. Sessions will reset on restart. Set FLASK_SECRET_KEY in production!")
     else:
         raise EnvironmentError("FLASK_SECRET_KEY environment variable is required in production")
         
@@ -56,6 +59,9 @@ SCOPES = os.getenv(
 
 TOKEN_STORE = Path("./tokens")
 TOKEN_STORE.mkdir(exist_ok=True)
+
+# Frontend URL for redirects - fallback to localhost if not set
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
 # ============ Regex Patterns ============
 EMAIL_PATTERN = re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b')
@@ -300,31 +306,78 @@ def api_inbox():
     
     service = build_gmail_service(creds)
     query = request.args.get("q", "")
+    page_token = request.args.get("pageToken", None)
+    folder = request.args.get("folder", "inbox").lower()
     
+    # Map folder to Gmail label
+    label_id = "INBOX"
+    if folder == "sent":
+        label_id = "SENT"
+        
     try:
-        msg_list = service.users().messages().list(
-            userId="me", maxResults=50, q=query, labelIds=["INBOX"]
-        ).execute().get("messages", [])
+        req = service.users().messages().list(
+            userId="me", maxResults=50, q=query, labelIds=[label_id], pageToken=page_token
+        )
+        response = req.execute()
+        
+        msg_list = response.get("messages", [])
+        next_page_token = response.get("nextPageToken")
         
         messages = []
         for m in msg_list:
+            # Optimize: Get only metadata for the list view if we don't need attachments immediately
+            # or keep full but ensure we get the right headers. 
+            # Given the previous speed complaint, metadata is better, 
+            # but the app shows attachment icons. 
+            # For now, let's keep full but make it as robust as possible.
             msg = service.users().messages().get(
                 userId="me", id=m["id"], format="full"
             ).execute()
-            headers = {h["name"]: h["value"] for h in msg.get("payload", {}).get("headers", [])}
+            
+            headers_list = msg.get("payload", {}).get("headers", [])
+            headers = {h["name"].lower(): h["value"] for h in headers_list}
             labels = msg.get("labelIds", [])
             
+            # Helper to get header case-insensitively
+            def get_header(name, default):
+                return next((h["value"] for h in headers_list if h["name"].lower() == name.lower()), default)
+
             # Extract attachments
             attachments = []
             def find_attachments(part):
+                body_data = part.get("body", {})
                 filename = part.get("filename", "")
-                if filename:
-                    body_data = part.get("body", {})
+                mime = part.get("mimeType", "")
+                att_id = body_data.get("attachmentId", "")
+                # Check Content-Disposition header for attachment indicator
+                part_headers = {h["name"].lower(): h["value"] for h in part.get("headers", [])}
+                disposition = part_headers.get("content-disposition", "")
+                
+                if filename and att_id:
                     attachments.append({
                         "filename": filename,
-                        "mimeType": part.get("mimeType", ""),
+                        "mimeType": mime,
                         "size": body_data.get("size", 0),
-                        "attachmentId": body_data.get("attachmentId", "")
+                        "attachmentId": att_id
+                    })
+                elif att_id and not mime.startswith("multipart/") and not mime.startswith("text/"):
+                    # Has attachment data but no filename — generate one
+                    ext = mime.split("/")[-1].split(";")[0] if "/" in mime else "bin"
+                    gen_name = f"attachment.{ext}"
+                    attachments.append({
+                        "filename": gen_name,
+                        "mimeType": mime,
+                        "size": body_data.get("size", 0),
+                        "attachmentId": att_id
+                    })
+                elif "attachment" in disposition and att_id:
+                    # Content-Disposition says attachment
+                    gen_name = filename or "attachment"
+                    attachments.append({
+                        "filename": gen_name,
+                        "mimeType": mime,
+                        "size": body_data.get("size", 0),
+                        "attachmentId": att_id
                     })
                 for subpart in part.get("parts", []):
                     find_attachments(subpart)
@@ -335,20 +388,24 @@ def api_inbox():
             messages.append({
                 "id": m["id"],
                 "snippet": msg.get("snippet", ""),
-                "from": headers.get("From", "(Unknown sender)"),
-                "subject": headers.get("Subject", "(No subject)"),
-                "date": headers.get("Date", "(No date)"),
+                "from": get_header("From", "Unknown Sender"),
+                "to": get_header("To", get_header("Delivered-To", "Unknown Recipient")),
+                "subject": get_header("Subject", "No Subject"),
+                "date": get_header("Date", "No Date"),
                 "is_spam": "SPAM" in labels,
                 "labels": labels,
                 "attachments": attachments,
                 "has_attachments": len(attachments) > 0
             })
         
-        return jsonify({"messages": messages})
+        return jsonify({
+            "messages": messages,
+            "nextPageToken": next_page_token
+        })
     
     except Exception as e:
         traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "An internal error occurred while fetching the inbox. Please try again later."}), 500
 
 
 @app.route("/api/message/<message_id>")
@@ -382,22 +439,48 @@ def api_get_message(message_id: str):
     try:
         msg = service.users().messages().get(userId="me", id=message_id, format="full").execute()
         snippet, body = parse_message_payload(msg)
-        headers = {h["name"]: h["value"] for h in msg.get("payload", {}).get("headers", [])}
+        headers_list = msg.get("payload", {}).get("headers", [])
+        headers = {h["name"].lower(): h["value"] for h in headers_list}
         
-        subject = headers.get("Subject", "")
+        subject = next((h["value"] for h in headers_list if h["name"].lower() == "subject"), "")
         text = body or snippet
         
         # Extract attachments first (fast)
         attachments = []
         def find_attachments(part):
+            body_data = part.get("body", {})
             filename = part.get("filename", "")
-            if filename:
-                body_data = part.get("body", {})
+            mime = part.get("mimeType", "")
+            att_id = body_data.get("attachmentId", "")
+            # Check Content-Disposition header for attachment indicator
+            part_headers = {h["name"].lower(): h["value"] for h in part.get("headers", [])}
+            disposition = part_headers.get("content-disposition", "")
+            
+            if filename and att_id:
                 attachments.append({
                     "filename": filename,
-                    "mimeType": part.get("mimeType", ""),
+                    "mimeType": mime,
                     "size": body_data.get("size", 0),
-                    "attachmentId": body_data.get("attachmentId", "")
+                    "attachmentId": att_id
+                })
+            elif att_id and not mime.startswith("multipart/") and not mime.startswith("text/"):
+                # Has attachment data but no filename — generate one
+                ext = mime.split("/")[-1].split(";")[0] if "/" in mime else "bin"
+                gen_name = f"attachment.{ext}"
+                attachments.append({
+                    "filename": gen_name,
+                    "mimeType": mime,
+                    "size": body_data.get("size", 0),
+                    "attachmentId": att_id
+                })
+            elif "attachment" in disposition and att_id:
+                # Content-Disposition says attachment
+                gen_name = filename or "attachment"
+                attachments.append({
+                    "filename": gen_name,
+                    "mimeType": mime,
+                    "size": body_data.get("size", 0),
+                    "attachmentId": att_id
                 })
             for subpart in part.get("parts", []):
                 find_attachments(subpart)
@@ -413,8 +496,9 @@ def api_get_message(message_id: str):
             "body": body,
             "headers": headers,
             "subject": subject,
-            "sender": headers.get("From", ""),
-            "date": headers.get("Date", ""),
+            "sender": next((h["value"] for h in headers_list if h["name"].lower() == "from"), ""),
+            "to": next((h["value"] for h in headers_list if h["name"].lower() == "to"), next((h["value"] for h in headers_list if h["name"].lower() == "delivered-to"), "")),
+            "date": next((h["value"] for h in headers_list if h["name"].lower() == "date"), ""),
             "attachments": attachments,
             "has_attachments": len(attachments) > 0,
             # AI fields - will be empty if lazy
@@ -431,7 +515,11 @@ def api_get_message(message_id: str):
         # Skip AI if lazy mode
         if not lazy:
             ai_result = analyze_email_comprehensive(text, subject)
-            email_data["summary"] = ai_result.get("summary", "")
+            summary = ai_result.get("summary", "")
+            if isinstance(summary, list):
+                summary = "\n".join([str(s) for s in summary])
+            
+            email_data["summary"] = summary
             email_data["priority"] = ai_result.get("priority", "MEDIUM")
             email_data["sentiment"] = ai_result.get("sentiment", {}).get("sentiment", "neutral")
             email_data["sentiment_score"] = ai_result.get("sentiment", {}).get("score", 0.5)
@@ -446,7 +534,7 @@ def api_get_message(message_id: str):
         return jsonify(email_data)
     except Exception as e:
         traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "An internal error occurred while loading the message."}), 500
 
 
 @app.route("/api/message/<message_id>/analyze")
@@ -477,13 +565,22 @@ def api_analyze_message(message_id: str):
     try:
         msg = service.users().messages().get(userId="me", id=message_id, format="full").execute()
         snippet, body = parse_message_payload(msg)
-        headers = {h["name"]: h["value"] for h in msg.get("payload", {}).get("headers", [])}
+        headers_list = msg.get("payload", {}).get("headers", [])
+        headers = {h["name"].lower(): h["value"] for h in headers_list}
         
-        subject = headers.get("Subject", "")
+        # Helper to get header case-insensitively
+        def get_header(name, default):
+            return next((h["value"] for h in headers_list if h["name"].lower() == name.lower()), default)
+
+        subject = get_header("subject", "")
         text = body or snippet
         
         # Run AI analysis
         ai_result = analyze_email_comprehensive(text, subject)
+        
+        summary = ai_result.get("summary", "")
+        if isinstance(summary, list):
+            summary = "\n".join([str(s) for s in summary])
         
         sentiment_val = ai_result.get("sentiment", {}).get("sentiment", "neutral")
         sentiment_score_val = ai_result.get("sentiment", {}).get("score", 0.5)
@@ -493,11 +590,12 @@ def api_analyze_message(message_id: str):
             "id": message_id,
             "user_id": uid,
             "subject": subject,
-            "sender": headers.get("From", ""),
-            "date": headers.get("Date", ""),
+            "sender": get_header("from", ""),
+            "to": get_header("to", get_header("delivered-to", "")),
+            "date": get_header("date", ""),
             "snippet": snippet,
             "body": body,
-            "summary": ai_result.get("summary", ""),
+            "summary": summary,
             "priority": ai_result.get("priority", "MEDIUM"),
             "sentiment": sentiment_val,
             "sentiment_score": sentiment_score_val,
@@ -507,7 +605,7 @@ def api_analyze_message(message_id: str):
         save_email_analysis(email_data)
         
         return jsonify({
-            "summary": ai_result.get("summary", ""),
+            "summary": summary,
             "priority": ai_result.get("priority", "MEDIUM"),
             "sentiment": sentiment_val,
             "sentiment_score": sentiment_score_val,
@@ -518,7 +616,7 @@ def api_analyze_message(message_id: str):
         })
     except Exception as e:
         traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "An internal error occurred while analyzing the message."}), 500
 
 
 @app.route("/api/attachment/<message_id>/<attachment_id>")
@@ -557,7 +655,7 @@ def api_get_attachment(message_id: str, attachment_id: str):
         
     except Exception as e:
         traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "An internal error occurred while downloading the attachment."}), 500
 
 
 @app.route("/api/chat", methods=["POST"])
@@ -643,38 +741,7 @@ def api_prioritize():
     return jsonify(results)
 
 
-@app.route("/api/analytics")
-def api_analytics():
-    """Get analytics data as JSON."""
-    uid = session.get("user_id")
-    if not uid:
-        return jsonify({"error": "not authenticated"}), 401
-    
-    analytics_data = get_analytics(uid)
-    return jsonify(analytics_data)
-
-
 # ============ Page Routes ============
-
-@app.before_request
-def restore_single_token_session():
-    """
-    Auto-restore session if there's exactly one token file.
-    Improves UX for single-user deployments.
-    """
-    if session.get("user_id"):
-        return
-    try:
-        files = list(TOKEN_STORE.glob("token_*.json"))
-        if len(files) == 1:
-            fname = files[0].name
-            if fname.startswith("token_") and fname.endswith(".json"):
-                user_id = fname[len("token_"):-len(".json")]
-                creds = load_credentials(user_id)
-                if creds is not None:
-                    session["user_id"] = user_id
-    except Exception as e:
-        print(f"Error restoring session: {e}")
 
 
 @app.route("/")
@@ -686,7 +753,7 @@ def index():
 @app.route("/login-page")
 def login_page():
     """Redirect to React (login handled by Flask OAuth)."""
-    return redirect("http://localhost:5173")
+    return redirect(FRONTEND_URL)
 
 
 @app.route("/login")
@@ -713,7 +780,7 @@ def oauth2callback():
     session["user_id"] = user_id
     save_credentials(user_id, creds)
     # Redirect to React frontend
-    return redirect("http://localhost:5173/inbox")
+    return redirect(f"{FRONTEND_URL}/inbox")
 
 
 @app.route("/logout")
@@ -750,19 +817,19 @@ def logout():
             
     session.clear()
     # Redirect to React frontend
-    return redirect("http://localhost:5173")
+    return redirect(FRONTEND_URL)
 
 
 @app.route("/chat")
 def chat_page():
     """Redirect to React chat page."""
-    return redirect("http://localhost:5173/chat")
+    return redirect(f"{FRONTEND_URL}/chat")
 
 
 @app.route("/inbox")
 def inbox():
     """Redirect to React inbox page."""
-    return redirect("http://localhost:5173/inbox")
+    return redirect(f"{FRONTEND_URL}/inbox")
 
 
 
@@ -770,13 +837,13 @@ def inbox():
 @app.route("/message/<message_id>")
 def message_detail(message_id: str):
     """Redirect to React message page."""
-    return redirect(f"http://localhost:5173/message/{message_id}")
+    return redirect(f"{FRONTEND_URL}/message/{message_id}")
 
 
 @app.route("/analytics")
 def analytics():
     """Redirect to React analytics page."""
-    return redirect("http://localhost:5173/analytics")
+    return redirect(f"{FRONTEND_URL}/analytics")
 
 
 @app.route("/generate_reply/<message_id>", methods=["POST"])
@@ -800,7 +867,7 @@ def generate_reply_endpoint(message_id: str):
         return jsonify({"reply": draft})
     except Exception as e:
         traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "An internal error occurred while generating a reply."}), 500
 
 
 @app.route("/send_reply/<message_id>", methods=["POST"])
@@ -852,7 +919,7 @@ def send_reply_endpoint(message_id: str):
         })
     except Exception as e:
         traceback.print_exc()
-        return jsonify({"error": f"Failed to send email: {str(e)}"}), 500
+        return jsonify({"error": "Failed to send the email. Please try again."}), 500
 
 
 @app.route("/api/compose", methods=["POST"])
@@ -867,9 +934,10 @@ def api_compose():
         service = build_gmail_service(creds)
         
         data = request.json or {}
-        to = data.get("to", "")
-        subject = data.get("subject", "")
-        body = data.get("body", "")
+        to = data.get("to")
+        subject = data.get("subject")
+        body = data.get("body")
+        attachments = data.get("attachments", []) # List of {filename, content (base64)}
         
         if not to:
             return jsonify({"error": "Recipient (to) is required"}), 400
@@ -879,7 +947,33 @@ def api_compose():
             return jsonify({"error": "Email body is required"}), 400
         
         # Create message
-        message_obj = MIMEText(body)
+        if not attachments:
+            message_obj = MIMEText(body)
+        else:
+            message_obj = MIMEMultipart()
+            message_obj.attach(MIMEText(body))
+            
+            for att in attachments:
+                try:
+                    filename = att.get("filename", "attachment")
+                    content_b64 = att.get("content", "")
+                    if not content_b64: continue
+                    
+                    # Handle raw base64 or data URI
+                    if "," in content_b64:
+                        content_b64 = content_b64.split(",")[1]
+                    
+                    part = MIMEBase("application", "octet-stream")
+                    part.set_payload(urlsafe_b64decode(content_b64))
+                    encoders.encode_base64(part)
+                    part.add_header(
+                        "Content-Disposition",
+                        f"attachment; filename=\"{filename}\"",
+                    )
+                    message_obj.attach(part)
+                except Exception as att_err:
+                    print(f"Error attaching file {att.get('filename')}: {att_err}")
+
         message_obj['To'] = to
         message_obj['Subject'] = subject
         
@@ -897,7 +991,7 @@ def api_compose():
         })
     except Exception as e:
         traceback.print_exc()
-        return jsonify({"error": f"Failed to send email: {str(e)}"}), 500
+        return jsonify({"error": "Failed to send the composed email. Please try again."}), 500
 
 
 @app.route("/api/inbox/check")
@@ -928,7 +1022,32 @@ def api_inbox_check():
         })
     except Exception as e:
         traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "An internal error occurred while polling the inbox."}), 500
+
+
+@app.route("/api/message/<message_id>/delete", methods=["POST"])
+def api_delete_message(message_id: str):
+    """Move a message to Gmail trash and remove from local cache."""
+    uid = session.get("user_id")
+    creds = load_credentials(uid)
+    if not creds:
+        return jsonify({"error": "not authenticated"}), 401
+
+    try:
+        service = build_gmail_service(creds)
+        # Move to trash in Gmail
+        service.users().messages().trash(userId="me", id=message_id).execute()
+        
+        # Also remove from local DB cache
+        try:
+            delete_email_by_id(message_id, uid)
+        except Exception:
+            pass  # Local cache cleanup is best-effort
+        
+        return jsonify({"success": True, "message": "Email moved to trash"})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": "Failed to delete the email. It may have already been removed."}), 500
 
 
 # ============ Health Check ============
@@ -942,4 +1061,5 @@ def health_check():
 # ============ Entry Point ============
 
 if __name__ == "__main__":
-    app.run(debug=DEBUG, port=5000)
+    # Listen on 0.0.0.0 to enable network access
+    app.run(host="0.0.0.0", debug=DEBUG, port=5000)
