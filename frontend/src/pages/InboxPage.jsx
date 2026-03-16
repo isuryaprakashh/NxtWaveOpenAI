@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import ComposeModal from "../components/ComposeModal";
-import { fetchInbox, fetchMessage, checkInbox } from "../services/api";
+import { fetchInbox, fetchMessage, checkInbox, checkAuth } from "../services/api";
 
 export default function InboxPage() {
     const navigate = useNavigate();
@@ -19,15 +19,42 @@ export default function InboxPage() {
     const [lastEmailId, setLastEmailId] = useState(null);
 
     useEffect(() => {
-        const cached = sessionStorage.getItem('odin_inbox_data');
-        if (cached) {
-            const parsed = JSON.parse(cached);
-            setEmails(parsed);
-            setInitialLoading(false);
-            if (parsed.length > 0) setLastEmailId(parsed[0].id);
-        } else {
-            loadEmails();
-        }
+        const initInbox = async () => {
+            // Check identity: clear stale cache if user changed
+            try {
+                const auth = await checkAuth();
+                const currentUserId = auth.user_id;
+                const cachedUserId = sessionStorage.getItem('odin_user_id');
+
+                if (cachedUserId && cachedUserId !== currentUserId) {
+                    // User changed — clear ALL stale cached data
+                    sessionStorage.removeItem('odin_inbox_data');
+                    sessionStorage.removeItem('odin_user_id');
+                    // Clear any email draft keys from localStorage
+                    Object.keys(localStorage).forEach(key => {
+                        if (key.startsWith('email_draft_')) {
+                            localStorage.removeItem(key);
+                        }
+                    });
+                }
+
+                // Store current user id for future comparisons
+                if (currentUserId) {
+                    sessionStorage.setItem('odin_user_id', currentUserId);
+                }
+            } catch { /* auth check failed, proceed normally */ }
+
+            const cached = sessionStorage.getItem('odin_inbox_data');
+            if (cached) {
+                const parsed = JSON.parse(cached);
+                setEmails(parsed);
+                setInitialLoading(false);
+                if (parsed.length > 0) setLastEmailId(parsed[0].id);
+            } else {
+                loadEmails();
+            }
+        };
+        initInbox();
     }, []);
 
     useEffect(() => {

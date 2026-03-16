@@ -70,6 +70,16 @@ export default function Navbar() {
                     {isAuthenticated ? (
                         <a 
                             href="/logout" 
+                            onClick={() => {
+                                // Clear all cached data before logout
+                                sessionStorage.removeItem('odin_inbox_data');
+                                sessionStorage.removeItem('odin_user_id');
+                                Object.keys(localStorage).forEach(key => {
+                                    if (key.startsWith('email_draft_')) {
+                                        localStorage.removeItem(key);
+                                    }
+                                });
+                            }}
                             className="btn-primary !bg-none !bg-gray-100 hover:!bg-gray-200 !text-gray-700 !px-5 !py-2.5 !text-[0.75rem] !font-bold uppercase tracking-wider !shadow-none"
                         >
                             Log Out

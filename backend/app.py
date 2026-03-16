@@ -303,7 +303,7 @@ def api_inbox():
     
     try:
         msg_list = service.users().messages().list(
-            userId="me", maxResults=50, q=query
+            userId="me", maxResults=50, q=query, labelIds=["INBOX"]
         ).execute().get("messages", [])
         
         messages = []
@@ -451,7 +451,9 @@ def api_get_message(message_id: str):
 
 @app.route("/api/message/<message_id>/analyze")
 def api_analyze_message(message_id: str):
-    """Get AI analysis for a message (for lazy loading)."""
+    """Get AI analysis for a message (for lazy loading).
+    Also persists the email + analysis to DB so RAG chat can find it.
+    """
     uid = session.get("user_id")
     creds = load_credentials(uid)
     if not creds:
@@ -483,11 +485,32 @@ def api_analyze_message(message_id: str):
         # Run AI analysis
         ai_result = analyze_email_comprehensive(text, subject)
         
+        sentiment_val = ai_result.get("sentiment", {}).get("sentiment", "neutral")
+        sentiment_score_val = ai_result.get("sentiment", {}).get("score", 0.5)
+        
+        # Save to DB so RAG chat can find this email
+        email_data = {
+            "id": message_id,
+            "user_id": uid,
+            "subject": subject,
+            "sender": headers.get("From", ""),
+            "date": headers.get("Date", ""),
+            "snippet": snippet,
+            "body": body,
+            "summary": ai_result.get("summary", ""),
+            "priority": ai_result.get("priority", "MEDIUM"),
+            "sentiment": sentiment_val,
+            "sentiment_score": sentiment_score_val,
+            "category": ai_result.get("category", "General"),
+            "extracted_info": ai_result.get("extracted_info", {}),
+        }
+        save_email_analysis(email_data)
+        
         return jsonify({
             "summary": ai_result.get("summary", ""),
             "priority": ai_result.get("priority", "MEDIUM"),
-            "sentiment": ai_result.get("sentiment", {}).get("sentiment", "neutral"),
-            "sentiment_score": ai_result.get("sentiment", {}).get("score", 0.5),
+            "sentiment": sentiment_val,
+            "sentiment_score": sentiment_score_val,
             "category": ai_result.get("category", "General"),
             "quick_replies": ai_result.get("quick_replies", []),
             "extracted_info": ai_result.get("extracted_info", {}),

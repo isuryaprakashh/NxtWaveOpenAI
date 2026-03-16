@@ -28,17 +28,17 @@ env/
 
 # Environment Variables
 .env
-.env.local
+backend/.env
 
 # Database
 *.db
 *.sqlite
 *.sqlite3
-email_data.db
 
 # OAuth Tokens
 tokens/
-*.json
+backend/tokens/
+token_*.json
 
 # IDE
 .vscode/
