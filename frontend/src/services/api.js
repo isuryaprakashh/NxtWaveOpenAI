@@ -25,7 +25,7 @@ async function fetchJSON(url, options = {}) {
 
 // Auth APIs
 export const checkAuth = () => fetchJSON('/api/auth/check').catch(() => ({ authenticated: false }));
-export const logout = () => fetch('/logout', { credentials: 'include' });
+export const logout = () => fetch(`${BASE_URL}/logout`, { credentials: 'include' });
 
 // Inbox APIs
 export const fetchInbox = (query = '', pageToken = '', folder = 'inbox') => {
@@ -65,7 +65,7 @@ export const sendReply = (id, replyText, to, subject) =>
 // Attachment API
 export const getAttachmentUrl = (messageId, attachmentId, filename, mimeType) => {
     const params = new URLSearchParams({ filename, mimeType });
-    return `/api/attachment/${messageId}/${attachmentId}?${params}`;
+    return `${BASE_URL}/api/attachment/${messageId}/${attachmentId}?${params}`;
 };
 
 // Chat API

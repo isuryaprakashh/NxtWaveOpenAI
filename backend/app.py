@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Optional, Dict, Tuple, Any
 
 from flask import Flask, session, redirect, url_for, request, render_template, flash, jsonify
+from flask_cors import CORS
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from concurrent.futures import ThreadPoolExecutor
 from google_auth_oauthlib.flow import Flow
@@ -77,6 +78,9 @@ TOKEN_STORE.mkdir(exist_ok=True)
 DEBUG = os.getenv("FLASK_DEBUG", "True").lower() == "true"
 # Frontend URL for redirects - fallback to localhost if not set
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+
+# Enable CORS for the frontend
+CORS(app, supports_credentials=True, origins=[FRONTEND_URL, "http://localhost:5173"])
 
 # ============ Regex Patterns ============
 EMAIL_PATTERN = re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b')
