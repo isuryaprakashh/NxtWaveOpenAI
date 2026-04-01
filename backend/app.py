@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Optional, Dict, Tuple, Any
 
 from flask import Flask, session, redirect, url_for, request, render_template, flash, jsonify
+from flask_socketio import SocketIO, emit, join_room, leave_room
+from concurrent.futures import ThreadPoolExecutor
 from google_auth_oauthlib.flow import Flow
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
@@ -26,7 +28,17 @@ from openai_helpers import (
     analyze_email_comprehensive, 
     generate_reply,
 )
-from database import save_email_analysis, get_analytics, get_email_by_id, search_emails, delete_email_by_id
+from database import (
+    save_email_analysis, 
+    get_analytics, 
+    get_email_by_id, 
+    search_emails, 
+    delete_email_by_id,
+    save_emails_batch,
+    get_emails_by_user,
+    save_user_token,
+    load_user_token
+)
 
 # ============ Configuration ============
 DEBUG = os.getenv("FLASK_DEBUG", "true").lower() == "true"
@@ -36,6 +48,8 @@ if DEBUG:
     os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
 app = Flask(__name__)
+socketio = SocketIO(app, cors_allowed_origins="*")
+analysis_executor = ThreadPoolExecutor(max_workers=5)
 
 # Secret key - require strong key in production
 SECRET_KEY = os.getenv("FLASK_SECRET_KEY")
@@ -70,13 +84,8 @@ PHONE_PATTERN = re.compile(r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b|\b\(\d{3}\)\s*\d{3}[-
 
 # ============ Helper Functions ============
 
-def token_path_for_user(user_id: str) -> Path:
-    """Get the token file path for a given user ID."""
-    return TOKEN_STORE / f"token_{user_id}.json"
-
-
 def save_credentials(user_id: str, creds: Credentials) -> None:
-    """Save OAuth credentials to disk for a user."""
+    """Save OAuth credentials to MongoDB with encryption."""
     data = {
         "token": creds.token,
         "refresh_token": creds.refresh_token,
@@ -85,18 +94,19 @@ def save_credentials(user_id: str, creds: Credentials) -> None:
         "client_secret": creds.client_secret,
         "scopes": creds.scopes,
     }
-    token_path_for_user(user_id).write_text(json.dumps(data))
+    save_user_token(user_id, data)
 
 
 def load_credentials(user_id: str) -> Optional[Credentials]:
-    """Load OAuth credentials from disk for a user."""
+    """Load and decrypt OAuth credentials from MongoDB."""
     if not user_id:
         return None
-    p = token_path_for_user(user_id)
-    if not p.exists():
+    
+    data = load_user_token(user_id)
+    if not data:
         return None
+        
     try:
-        data = json.loads(p.read_text())
         return Credentials(
             token=data["token"],
             refresh_token=data.get("refresh_token"),
@@ -105,8 +115,8 @@ def load_credentials(user_id: str) -> Optional[Credentials]:
             client_secret=data["client_secret"],
             scopes=data.get("scopes"),
         )
-    except (json.JSONDecodeError, KeyError) as e:
-        print(f"Error loading credentials: {e}")
+    except Exception as e:
+        print(f"Error reconstruct credentials: {e}")
         return None
 
 
@@ -298,18 +308,29 @@ def api_auth_check():
 
 @app.route("/api/inbox")
 def api_inbox():
-    """Return inbox emails as JSON for React frontend."""
+    """Return inbox emails as JSON for React frontend. Checks MongoDB first for speed."""
     uid = session.get("user_id")
     creds = load_credentials(uid)
     if not creds:
         return jsonify({"error": "not authenticated"}), 401
     
-    service = build_gmail_service(creds)
     query = request.args.get("q", "")
     page_token = request.args.get("pageToken", None)
     folder = request.args.get("folder", "inbox").lower()
     
-    # Map folder to Gmail label
+    # Try to fetch from MongoDB first if it's a standard inbox view without search/paging
+    if not query and not page_token and folder == "inbox":
+        db_emails = get_emails_by_user(uid, limit=50)
+        if len(db_emails) >= 50:
+            print(f"🚀 Serving 50 emails from MongoDB for {uid}")
+            return jsonify({
+                "messages": db_emails,
+                "nextPageToken": None, # Paging still requires Gmail API for now
+                "from_cache": True
+            })
+
+    # If not in DB or special request, fetch from Gmail
+    service = build_gmail_service(creds)
     label_id = "INBOX"
     if folder == "sent":
         label_id = "SENT"
@@ -324,84 +345,58 @@ def api_inbox():
         next_page_token = response.get("nextPageToken")
         
         messages = []
+        sync_list = [] # List for background sync (metadata only for list)
+        
         for m in msg_list:
-            # Optimize: Get only metadata for the list view if we don't need attachments immediately
-            # or keep full but ensure we get the right headers. 
-            # Given the previous speed complaint, metadata is better, 
-            # but the app shows attachment icons. 
-            # For now, let's keep full but make it as robust as possible.
+            # Metadata-only fetch is 10x faster for the inbox list
             msg = service.users().messages().get(
-                userId="me", id=m["id"], format="full"
+                userId="me", id=m["id"], format="metadata",
+                metadataHeaders=["From", "To", "Subject", "Date", "Delivered-To"]
             ).execute()
             
             headers_list = msg.get("payload", {}).get("headers", [])
-            headers = {h["name"].lower(): h["value"] for h in headers_list}
             labels = msg.get("labelIds", [])
+            snippet = msg.get("snippet", "")
             
             # Helper to get header case-insensitively
             def get_header(name, default):
                 return next((h["value"] for h in headers_list if h["name"].lower() == name.lower()), default)
 
-            # Extract attachments
-            attachments = []
-            def find_attachments(part):
-                body_data = part.get("body", {})
-                filename = part.get("filename", "")
-                mime = part.get("mimeType", "")
-                att_id = body_data.get("attachmentId", "")
-                # Check Content-Disposition header for attachment indicator
-                part_headers = {h["name"].lower(): h["value"] for h in part.get("headers", [])}
-                disposition = part_headers.get("content-disposition", "")
-                
-                if filename and att_id:
-                    attachments.append({
-                        "filename": filename,
-                        "mimeType": mime,
-                        "size": body_data.get("size", 0),
-                        "attachmentId": att_id
-                    })
-                elif att_id and not mime.startswith("multipart/") and not mime.startswith("text/"):
-                    # Has attachment data but no filename — generate one
-                    ext = mime.split("/")[-1].split(";")[0] if "/" in mime else "bin"
-                    gen_name = f"attachment.{ext}"
-                    attachments.append({
-                        "filename": gen_name,
-                        "mimeType": mime,
-                        "size": body_data.get("size", 0),
-                        "attachmentId": att_id
-                    })
-                elif "attachment" in disposition and att_id:
-                    # Content-Disposition says attachment
-                    gen_name = filename or "attachment"
-                    attachments.append({
-                        "filename": gen_name,
-                        "mimeType": mime,
-                        "size": body_data.get("size", 0),
-                        "attachmentId": att_id
-                    })
-                for subpart in part.get("parts", []):
-                    find_attachments(subpart)
+            # Metadata fetch doesn't include attachments info in 'full' way, 
+            # but we can check for the 'Has Attachment' label or look at headers.
+            has_attachments = "ATTACHMENT" in labels or any("attachment" in h["value"].lower() for h in headers_list if h["name"].lower() == "content-type")
             
-            payload = msg.get("payload", {})
-            find_attachments(payload)
-            
-            messages.append({
+            email_item = {
                 "id": m["id"],
-                "snippet": msg.get("snippet", ""),
+                "user_id": uid,
+                "snippet": snippet,
+                "body": None, # Will be fetched via lazy-load when clicked
                 "from": get_header("From", "Unknown Sender"),
                 "to": get_header("To", get_header("Delivered-To", "Unknown Recipient")),
                 "subject": get_header("Subject", "No Subject"),
                 "date": get_header("Date", "No Date"),
                 "is_spam": "SPAM" in labels,
                 "labels": labels,
-                "attachments": attachments,
-                "has_attachments": len(attachments) > 0
-            })
+                "has_attachments": has_attachments,
+                "attachments": [] # Lazy loaded
+            }
+            messages.append(email_item)
+            sync_list.append(email_item)
+        
+        # Save to MongoDB for RAG and future fast access
+        if not query and folder == "inbox":
+            save_emails_batch(sync_list)
+            print(f"✅ Synced {len(sync_list)} emails to MongoDB for {uid}")
         
         return jsonify({
             "messages": messages,
-            "nextPageToken": next_page_token
+            "nextPageToken": next_page_token,
+            "from_cache": False
         })
+    
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
     
     except Exception as e:
         traceback.print_exc()
@@ -575,44 +570,47 @@ def api_analyze_message(message_id: str):
         subject = get_header("subject", "")
         text = body or snippet
         
-        # Run AI analysis
-        ai_result = analyze_email_comprehensive(text, subject)
-        
-        summary = ai_result.get("summary", "")
-        if isinstance(summary, list):
-            summary = "\n".join([str(s) for s in summary])
-        
-        sentiment_val = ai_result.get("sentiment", {}).get("sentiment", "neutral")
-        sentiment_score_val = ai_result.get("sentiment", {}).get("score", 0.5)
-        
-        # Save to DB so RAG chat can find this email
-        email_data = {
+        # Run AI analysis in background if not cached
+        def run_background_analysis(msg_id, uid_val, email_text, subj):
+            with app.app_context():
+                try:
+                    result = analyze_email_comprehensive(email_text, subj)
+                    # Save results to DB
+                    email_data = {
+                         "id": msg_id,
+                         "user_id": uid_val,
+                         "summary": result.get("summary", ""),
+                         "priority": result.get("priority", "MEDIUM"),
+                         "sentiment": result.get("sentiment", {}).get("sentiment", "neutral"),
+                         "sentiment_score": result.get("sentiment", {}).get("score", 0.5),
+                         "category": result.get("category", "General"),
+                         "extracted_info": result.get("extracted_info", {}),
+                    }
+                    save_email_analysis(email_data)
+                    # Push result to user via Sockets
+                    socketio.emit('analysis_complete', email_data, room=uid_val)
+                    print(f"✅ Background analysis complete for {msg_id}")
+                except Exception as e:
+                    print(f"❌ Background analysis failed: {e}")
+
+        # Trigger analysis if not already analyzed (check fields)
+        if not cached or not cached.get('summary'):
+            analysis_executor.submit(run_background_analysis, message_id, uid, text, subject)
+
+        return jsonify({
             "id": message_id,
-            "user_id": uid,
-            "subject": subject,
-            "sender": get_header("from", ""),
-            "to": get_header("to", get_header("delivered-to", "")),
-            "date": get_header("date", ""),
             "snippet": snippet,
             "body": body,
-            "summary": summary,
-            "priority": ai_result.get("priority", "MEDIUM"),
-            "sentiment": sentiment_val,
-            "sentiment_score": sentiment_score_val,
-            "category": ai_result.get("category", "General"),
-            "extracted_info": ai_result.get("extracted_info", {}),
-        }
-        save_email_analysis(email_data)
-        
-        return jsonify({
-            "summary": summary,
-            "priority": ai_result.get("priority", "MEDIUM"),
-            "sentiment": sentiment_val,
-            "sentiment_score": sentiment_score_val,
-            "category": ai_result.get("category", "General"),
-            "quick_replies": ai_result.get("quick_replies", []),
-            "extracted_info": ai_result.get("extracted_info", {}),
-            "ai_loaded": True
+            "subject": subject,
+            "sender": next((h["value"] for h in headers_list if h["name"].lower() == "from"), ""),
+            "date": next((h["value"] for h in headers_list if h["name"].lower() == "date"), ""),
+            "attachments": attachments,
+            "has_attachments": len(attachments) > 0,
+            # Return cached data if exist, else return placeholders
+            "summary": cached.get("summary") if cached else None,
+            "priority": cached.get("priority") if cached else "ANALYZING...",
+            "category": cached.get("category") if cached else "ANALYZING...",
+            "ai_loaded": bool(cached and cached.get('summary'))
         })
     except Exception as e:
         traceback.print_exc()
@@ -678,7 +676,7 @@ def api_chat():
     # This enables questions like "Summarize my inbox" or "What's new?"
     is_fallback = False
     if not relevant_emails:
-        relevant_emails = search_emails("", user_id=uid, limit=15)
+        relevant_emails = search_emails("", user_id=uid, limit=30)
         is_fallback = True
         
     if not relevant_emails:
@@ -747,7 +745,7 @@ def api_prioritize():
 @app.route("/")
 def index():
     """Redirect to React home page."""
-    return redirect("http://localhost:5173")
+    return redirect(FRONTEND_URL)
 
 
 @app.route("/login-page")
@@ -776,7 +774,12 @@ def oauth2callback():
     flow.fetch_token(authorization_response=request.url)
 
     creds = flow.credentials
-    user_id = str(uuid.uuid4())
+    
+    # Use user's email as persistent ID instead of random UUID
+    service = build_gmail_service(creds)
+    profile = service.users().getProfile(userId='me').execute()
+    user_id = profile.get('emailAddress')
+    
     session["user_id"] = user_id
     save_credentials(user_id, creds)
     # Redirect to React frontend
@@ -788,26 +791,6 @@ def logout():
     """Log out and clear session, including cached data."""
     uid = session.get("user_id")
     if uid:
-        try:
-            # Clear cached emails from DB
-            from database import get_db_connection
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            
-            # Delete extracted info related to this user's emails
-            cursor.execute('''
-                DELETE FROM extracted_info 
-                WHERE email_id IN (SELECT id FROM emails WHERE user_id = ?)
-            ''', (uid,))
-            
-            # Delete the emails themselves
-            cursor.execute('DELETE FROM emails WHERE user_id = ?', (uid,))
-            
-            conn.commit()
-            conn.close()
-        except Exception as e:
-            print(f"Error clearing cache on logout: {e}")
-
         # Delete token file
         p = token_path_for_user(uid)
         try:
@@ -840,10 +823,13 @@ def message_detail(message_id: str):
     return redirect(f"{FRONTEND_URL}/message/{message_id}")
 
 
-@app.route("/analytics")
+@app.route("/api/analytics")
 def analytics():
     """Redirect to React analytics page."""
     return redirect(f"{FRONTEND_URL}/analytics")
+
+
+# ============ SocketIO Event Handlers ============
 
 
 @app.route("/generate_reply/<message_id>", methods=["POST"])
@@ -1058,8 +1044,24 @@ def health_check():
     return jsonify({"status": "healthy", "debug": DEBUG})
 
 
+# ============ SocketIO Event Handlers ============
+
+@socketio.on('connect')
+def handle_connect():
+    uid = session.get("user_id")
+    if uid:
+        join_room(uid)
+        print(f"📡 User {uid} connected to WebSockets")
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    uid = session.get("user_id")
+    if uid:
+        leave_room(uid)
+        print(f"📡 User {uid} disconnected")
+
+
 # ============ Entry Point ============
 
 if __name__ == "__main__":
-    # Listen on 0.0.0.0 to enable network access
-    app.run(host="0.0.0.0", debug=DEBUG, port=5000)
+    socketio.run(app, debug=DEBUG, port=5000, host="0.0.0.0")

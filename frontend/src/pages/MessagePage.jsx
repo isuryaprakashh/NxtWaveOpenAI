@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { fetchMessage, fetchAnalysis, generateReply, sendReply as apiSendReply, deleteEmail } from "../services/api";
+import { io } from "socket.io-client";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -28,6 +29,30 @@ export default function MessagePage() {
     const closeConfirm = () => setConfirmModal(prev => ({ ...prev, open: false }));
 
     const getAttUrl = (att) => `/api/attachment/${id}/${att.attachmentId}?filename=${encodeURIComponent(att.filename)}&mimeType=${encodeURIComponent(att.mimeType)}`;
+
+    // Real-time AI analysis updates
+    useEffect(() => {
+        const socket = io("http://localhost:5000", {
+            withCredentials: true,
+            transports: ["websocket"]
+        });
+
+        socket.on("connect", () => {
+            console.log("📡 Message View: Real-time connected");
+        });
+
+        socket.on("analysis_complete", (data) => {
+            if (data.id === id) {
+                console.log("✨ AI Analysis finished in background!");
+                setMail(prev => ({ ...prev, ...data, ai_loaded: true }));
+                setAiLoading(false);
+            }
+        });
+
+        return () => {
+            socket.disconnect();
+        };
+    }, [id]);
 
     useEffect(() => {
         fetchMessage(id, { lazy: true })

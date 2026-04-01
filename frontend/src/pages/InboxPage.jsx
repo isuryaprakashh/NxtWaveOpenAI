@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import ComposeModal from "../components/ComposeModal";
 import { fetchInbox, fetchMessage, fetchAnalysis, checkInbox, checkAuth, deleteEmail } from "../services/api";
+import { saveEmailsToDB, getEmailsFromDB, clearEmailsForUser } from "../services/db";
+import { io } from "socket.io-client";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -143,6 +145,8 @@ export default function InboxPage({ folder = 'inbox' }) {
     const [lastEmailId, setLastEmailId] = useState(null);
     const [nextPageToken, setNextPageToken] = useState(null);
     const [loadingMore, setLoadingMore] = useState(false);
+    const [userId, setUserId] = useState(sessionStorage.getItem('odin_user_id'));
+    const [hasNewEmails, setHasNewEmails] = useState(false);
 
     // Custom confirm modal state
     const [confirmModal, setConfirmModal] = useState({ open: false, title: '', message: '', onConfirm: null, danger: false, confirmLabel: 'Confirm' });
@@ -181,6 +185,7 @@ export default function InboxPage({ folder = 'inbox' }) {
                     });
                 }
 
+                setUserId(currentUserId);
                 sessionStorage.setItem('odin_user_id', currentUserId);
             } catch (err) {
                 console.error("Auth check failed:", err);
@@ -189,21 +194,19 @@ export default function InboxPage({ folder = 'inbox' }) {
                 return;
             }
 
-            // Use User-Scoped Cache Keys
-            const cacheKey = `odin_v3_${currentUserId}_cache_${folder}`;
-            const tokenKey = `odin_v3_${currentUserId}_token_${folder}`;
+            // Use IndexedDB for SaaS-Level Scaling (GBs instead of 5MB sessionStorage)
+            const cached = await getEmailsFromDB(currentUserId, folder);
             
-            const cached = sessionStorage.getItem(cacheKey);
-            const cachedToken = sessionStorage.getItem(tokenKey);
-
-            if (cached) {
-                const parsed = JSON.parse(cached);
-                setEmails(parsed);
+            if (cached && cached.length > 0) {
+                setEmails(cached);
+                // Last page token still in session storage (small data)
+                const tokenKey = `odin_v3_${currentUserId}_token_${folder}`;
+                const cachedToken = sessionStorage.getItem(tokenKey);
                 if (cachedToken) setNextPageToken(cachedToken);
                 setInitialLoading(false);
-                if (parsed.length > 0) setLastEmailId(parsed[0].id);
+                setLastEmailId(cached[0].id);
             } else {
-                // No cache — clear previous list and show loading
+                // No cache in IndexedDB — clear previous list and show loading
                 setEmails([]);
                 setInitialLoading(true);
                 loadEmails(currentUserId);
@@ -212,18 +215,29 @@ export default function InboxPage({ folder = 'inbox' }) {
         initInbox();
     }, [folder]);
 
+    // Real-time updates via SocketIO
     useEffect(() => {
-        if (isSentFolder) return; // Don't poll for Sent folder
-        const poll = setInterval(async () => {
-            try {
-                const result = await checkInbox();
-                if (result.latest_id && lastEmailId && result.latest_id !== lastEmailId) {
-                    setNewEmailCount(prev => prev + 1);
-                }
-            } catch { /* silent fail */ }
-        }, 30000);
-        return () => clearInterval(poll);
-    }, [lastEmailId, isSentFolder]);
+        if (!userId) return;
+
+        const socket = io("http://localhost:5000", {
+            withCredentials: true,
+            transports: ["websocket"]
+        });
+
+        socket.on("connect", () => {
+            console.log("📡 Connected to Odin Real-time");
+        });
+
+        socket.on("new_email", (data) => {
+            console.log("📬 New email detected via SocketIO");
+            setHasNewEmails(true);
+            setNewEmailCount(prev => prev + 1);
+        });
+
+        return () => {
+            socket.disconnect();
+        };
+    }, [userId]);
 
     const loadEmails = async (providedUid = null, isRefresh = false) => {
         if (!isRefresh && (!emails || emails.length === 0)) setInitialLoading(true);
@@ -250,7 +264,10 @@ export default function InboxPage({ folder = 'inbox' }) {
                 setEmails(data.messages);
                 setNextPageToken(data.nextPageToken || null);
                 
-                sessionStorage.setItem(cacheKey, JSON.stringify(data.messages));
+                // Save to IndexedDB
+                await saveEmailsToDB(data.messages, uid, folder);
+                
+                const tokenKey = `odin_v3_${uid}_token_${folder}`;
                 if (data.nextPageToken) {
                     sessionStorage.setItem(tokenKey, data.nextPageToken);
                 } else {

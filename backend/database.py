@@ -8,12 +8,29 @@ from datetime import datetime
 from typing import Dict, List, Optional
 from pymongo import MongoClient, UpdateOne, ASCENDING, DESCENDING
 from pymongo.errors import ConnectionFailure
+from cryptography.fernet import Fernet
+from email.utils import parsedate_to_datetime
 
 # MongoDB Configuration
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
 DB_NAME = os.getenv("MONGO_DB_NAME", "odin_email_db")
+ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
 
 _client = None
+_fernet = None
+
+def get_fernet():
+    """Get Fernet instance for encryption/decryption."""
+    global _fernet
+    if _fernet is None:
+        if not ENCRYPTION_KEY:
+            # Fallback for development if key isn't set yet
+            print("🚀 WARNING: ENCRYPTION_KEY not set. Generating a temporary key...")
+            key = Fernet.generate_key().decode()
+            _fernet = Fernet(key.encode())
+        else:
+            _fernet = Fernet(ENCRYPTION_KEY.encode())
+    return _fernet
 
 def get_db():
     """Get MongoDB database instance with lazy initialization and connection pooling."""
@@ -48,8 +65,12 @@ def init_db() -> None:
         ("body", "text")
     ], name="email_text_search")
     
-    # TTL Index can be added if we want automatic cache expiration, 
-    # but for now we'll keep it persistent.
+    # Tokens collection - ensure unique user_id
+    db.tokens.create_index([("user_id", ASCENDING)], unique=True)
+    
+    # Create index on timestamp for temporal queries
+    db.emails.create_index([("timestamp", DESCENDING)])
+    
     print(f"MongoDB initialized: {DB_NAME}")
 
 def save_email_analysis(email_data: Dict) -> bool:
@@ -86,7 +107,8 @@ def save_email_analysis(email_data: Dict) -> bool:
             "sentiment_score": float(payload.get('sentiment_score', 0.5)),
             "category": ensure_str(payload.get('category', "General")),
             "extracted_info": payload.get('extracted_info', {}), # Nested JSON is native to Mongo
-            "processed_at": datetime.utcnow()
+            "processed_at": datetime.utcnow(),
+            "timestamp": email_date_to_timestamp(payload.get('date'))
         }
 
         # Upsert: Update if exists, insert if not
@@ -99,6 +121,63 @@ def save_email_analysis(email_data: Dict) -> bool:
     except Exception as e:
         print(f"Error saving to MongoDB: {e}")
         return False
+
+def save_emails_batch(email_list: List[Dict]) -> bool:
+    """
+    Save multiple emails to MongoDB efficiently using bulk operations.
+    Skips AI fields to enable fast initial sync.
+    """
+    db = get_db()
+    try:
+        operations = []
+        for payload in email_list:
+            # Ensure primitive types
+            def ensure_str(val): return str(val) if val is not None else ""
+            
+            doc = {
+                "id": ensure_str(payload.get('id')),
+                "user_id": ensure_str(payload.get('user_id')),
+                "subject": ensure_str(payload.get('subject')),
+                "sender": ensure_str(payload.get('from') or payload.get('sender')),
+                "recipient": ensure_str(payload.get('to')),
+                "date": ensure_str(payload.get('date')),
+                "snippet": ensure_str(payload.get('snippet')),
+                "body": ensure_str(payload.get('body')),
+                "processed_at": datetime.utcnow(),
+                "timestamp": email_date_to_timestamp(payload.get('date'))
+            }
+            
+            # Using update_one with $set for basic info, but not touching labels/summaries if they exist
+            operations.append(UpdateOne(
+                {"id": doc["id"]},
+                {"$set": doc},
+                upsert=True
+            ))
+            
+        if operations:
+            db.emails.bulk_write(operations)
+        return True
+    except Exception as e:
+        print(f"Error bulk saving to MongoDB: {e}")
+        return False
+
+def get_emails_by_user(user_id: str, limit: int = 50) -> List[Dict]:
+    """Retrieve indexed emails for a specific user from MongoDB."""
+    db = get_db()
+    try:
+        # Sort by actual email timestamp instead of processed_at
+        results = db.emails.find({"user_id": user_id}).sort("timestamp", DESCENDING).limit(limit)
+        email_list = []
+        for r in results:
+            if '_id' in r: del r['_id']
+            if 'processed_at' in r: r['processed_at'] = r['processed_at'].isoformat()
+            # Map back to 'from' for frontend compatibility if saved as 'sender'
+            if 'sender' in r: r['from'] = r['sender']
+            email_list.append(r)
+        return email_list
+    except Exception as e:
+        print(f"Error fetching from MongoDB for user {user_id}: {e}")
+        return []
 
 def get_analytics(user_id: str) -> Dict:
     """
@@ -149,6 +228,8 @@ def get_analytics(user_id: str) -> Dict:
 
         for r in recent:
             r['processed_at'] = r['processed_at'].isoformat()
+            if 'timestamp' in r and r['timestamp']:
+                r['timestamp'] = r['timestamp'].isoformat()
             if '_id' in r: del r['_id']
             analytics['recent_emails'].append(r)
 
@@ -174,7 +255,8 @@ def search_emails(query_text: str, user_id: str, limit: int = 20) -> List[Dict]:
             ]
         }
         
-        results = db.emails.find(query).limit(limit).sort("processed_at", DESCENDING)
+        # Sort by actual email timestamp
+        results = db.emails.find(query).limit(limit).sort("timestamp", DESCENDING)
         
         email_list = []
         for r in results:
@@ -219,6 +301,59 @@ def delete_email_by_id(email_id: str, user_id: Optional[str] = None) -> bool:
     except Exception as e:
         print(f"Error deleting from MongoDB: {e}")
         return False
+
+
+def email_date_to_timestamp(date_str: Optional[str]) -> Optional[datetime]:
+    """Parse Gmail date string to Python datetime."""
+    if not date_str:
+        return datetime.utcnow()
+    try:
+        dt = parsedate_to_datetime(date_str)
+        # Convert to UTC for consistency in database
+        return dt.astimezone(datetime.utcnow().astimezone().tzinfo).replace(tzinfo=None)
+    except Exception:
+        return datetime.utcnow()
+
+# ============ Token Encryption & Storage ============
+
+def save_user_token(user_id: str, token_data: Dict) -> bool:
+    """Encrypt and save OAuth tokens to MongoDB."""
+    db = get_db()
+    fernet = get_fernet()
+    try:
+        # Serialize to JSON and encrypt
+        json_data = json.dumps(token_data)
+        encrypted_data = fernet.encrypt(json_data.encode()).decode()
+        
+        db.tokens.update_one(
+            {"user_id": user_id},
+            {"$set": {
+                "user_id": user_id,
+                "token_blob": encrypted_data,
+                "updated_at": datetime.utcnow()
+            }},
+            upsert=True
+        )
+        return True
+    except Exception as e:
+        print(f"Error saving encrypted token: {e}")
+        return False
+
+def load_user_token(user_id: str) -> Optional[Dict]:
+    """Load and decrypt OAuth tokens from MongoDB."""
+    db = get_db()
+    fernet = get_fernet()
+    try:
+        res = db.tokens.find_one({"user_id": user_id})
+        if not res:
+            return None
+        
+        encrypted_data = res["token_blob"]
+        decrypted_json = fernet.decrypt(encrypted_data.encode()).decode()
+        return json.loads(decrypted_json)
+    except Exception as e:
+        print(f"Error loading/decrypting token: {e}")
+        return None
 
 # Initialize on import
 try:

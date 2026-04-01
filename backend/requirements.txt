@@ -6,4 +6,9 @@ google-api-python-client==2.111.0
 requests>=2.31.0
 python-dotenv==1.0.0
 google-generativeai
+pymongo==4.6.1
+dnspython==2.4.2
+cryptography==41.0.7
+flask-socketio==5.3.6
+eventlet>=0.35.2
 

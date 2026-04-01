@@ -47,6 +47,16 @@ export default function Navbar() {
 
                 {/* Center Links (Matching "PLATFORM > DEVELOPERS > BLOGS") */}
                 <div className="flex-1 hidden md:flex items-center justify-center gap-10">
+                    {/* Today's Date Display */}
+                    <div className="flex items-center gap-2 pr-6 border-r border-gray-100">
+                        <span className="text-[0.65rem] tracking-[0.15em] font-bold uppercase text-gray-400">
+                            Today
+                        </span>
+                        <span className="text-[0.65rem] tracking-[0.1em] font-medium text-gray-900 bg-gray-50 px-2 py-0.5 rounded-full border border-gray-100">
+                            {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </span>
+                    </div>
+
                     {isAuthenticated && navLinks.map((link) => (
                         <Link
                             key={link.path}

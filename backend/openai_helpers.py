@@ -401,8 +401,13 @@ def ask_gemini_with_context(question: str, context: str) -> str:
     if not context:
         return "I couldn't find any relevant emails to answer your question."
         
+    from datetime import datetime
+    today = datetime.now().strftime("%A, %B %d, %Y")
+    
     prompt = f"""
     You are a helpful AI Email Assistant. 
+    TODAY'S DATE: {today}
+    
     Answer the user's question mostly using the provided email context.
     If the answer isn't in the context, say you don't know based on the emails found.
     Cite specific emails by their Subject or Sender if relevant.
