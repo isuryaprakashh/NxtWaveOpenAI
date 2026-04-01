@@ -76,11 +76,13 @@ TOKEN_STORE = Path("./tokens")
 TOKEN_STORE.mkdir(exist_ok=True)
 
 DEBUG = os.getenv("FLASK_DEBUG", "True").lower() == "true"
-# Frontend URL for redirects - fallback to localhost if not set
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+# Frontend URL for redirects - fallback to production if not set in environment
+raw_frontend_url = os.getenv("FRONTEND_URL", "https://odin-mail-dusky.vercel.app")
+FRONTEND_URL = raw_frontend_url.rstrip('/')
 
-# Enable CORS for the frontend
-CORS(app, supports_credentials=True, origins=[FRONTEND_URL, "http://localhost:5173"])
+# Enable CORS for the frontend (Allow both with and without trailing slash for stability)
+origins = [FRONTEND_URL, FRONTEND_URL + "/", "http://localhost:5173"]
+CORS(app, supports_credentials=True, origins=origins)
 
 # ============ Regex Patterns ============
 EMAIL_PATTERN = re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b')
