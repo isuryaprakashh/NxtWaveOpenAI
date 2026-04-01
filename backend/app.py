@@ -74,6 +74,7 @@ SCOPES = os.getenv(
 TOKEN_STORE = Path("./tokens")
 TOKEN_STORE.mkdir(exist_ok=True)
 
+DEBUG = os.getenv("FLASK_DEBUG", "True").lower() == "true"
 # Frontend URL for redirects - fallback to localhost if not set
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
@@ -1064,4 +1065,6 @@ def handle_disconnect():
 # ============ Entry Point ============
 
 if __name__ == "__main__":
-    socketio.run(app, debug=DEBUG, port=5000, host="0.0.0.0")
+    # Render provides $PORT, fallback to 5000 for local
+    port = int(os.environ.get("PORT", 5000))
+    socketio.run(app, debug=DEBUG, port=port, host="0.0.0.0")

@@ -11,4 +11,5 @@ dnspython==2.4.2
 cryptography==41.0.7
 flask-socketio==5.3.6
 eventlet>=0.35.2
+gunicorn==21.2.0
 

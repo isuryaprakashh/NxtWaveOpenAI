@@ -1,8 +1,12 @@
 // API service for communicating with Flask backend
+export const BASE_URL = import.meta.env.VITE_API_URL || '';
 
 // Helper for JSON requests
 async function fetchJSON(url, options = {}) {
-    const response = await fetch(url, {
+    // Prefix URL with base if absolute path
+    const targetUrl = url.startsWith('/') ? `${BASE_URL}${url}` : url;
+    
+    const response = await fetch(targetUrl, {
         ...options,
         credentials: 'include',  // Include cookies for session
         headers: {
