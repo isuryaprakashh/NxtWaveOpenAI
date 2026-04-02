@@ -751,8 +751,13 @@ def api_prioritize():
 
 @app.route("/")
 def index():
-    """Redirect to React home page."""
-    return redirect(FRONTEND_URL)
+    """Backend status page (no redirect)."""
+    return jsonify({
+        "status": "Odin Backend is Online",
+        "version": "2.1.0",
+        "frontend_link": FRONTEND_URL,
+        "auth_status": "authenticated" if session.get("user_id") else "unauthenticated"
+    })
 
 
 @app.route("/login-page")
