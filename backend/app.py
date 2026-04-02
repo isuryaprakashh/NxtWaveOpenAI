@@ -38,7 +38,9 @@ from database import (
     save_emails_batch,
     get_emails_by_user,
     save_user_token,
-    load_user_token
+    load_user_token,
+    create_session_token,     # NEW: For no-cookie auth
+    validate_session_token    # NEW: For no-cookie auth
 )
 from config import (
     get_backend_port, 
@@ -75,6 +77,8 @@ app.secret_key = SECRET_KEY
 app.config.update(
     SESSION_COOKIE_SAMESITE='None',
     SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_NAME='odin_session' 
 )
 
 # Google OAuth Configuration
@@ -311,22 +315,38 @@ def _clean_email_body(body_text: str) -> str:
     return result
 
 
+def get_auth_user():
+    """Identify the current user from Session OR X-Odin-Token header."""
+    # 1. Check traditional session
+    uid = session.get("user_id")
+    if uid:
+        return uid
+    
+    # 2. Check for Token Header (for cross-domain/no-cookie support)
+    token = request.headers.get("X-Odin-Token")
+    if token:
+        valid_uid = validate_session_token(token)
+        if valid_uid:
+            return valid_uid
+            
+    return None
+
 # ============ API Routes ============
 
 @app.route("/api/auth/check")
 def api_auth_check():
-    """Check if user is authenticated."""
-    uid = session.get("user_id")
+    """Check if user is authenticated via Cookie OR Header Token."""
+    uid = get_auth_user()
     creds = load_credentials(uid)
     if creds:
         return jsonify({"authenticated": True, "user_id": uid})
-    return jsonify({"authenticated": False})
+    return jsonify({"authenticated": False}), 401
 
 
 @app.route("/api/inbox")
 def api_inbox():
     """Return inbox emails as JSON for React frontend. Checks MongoDB first for speed."""
-    uid = session.get("user_id")
+    uid = get_auth_user()
     creds = load_credentials(uid)
     if not creds:
         return jsonify({"error": "not authenticated"}), 401
@@ -423,7 +443,7 @@ def api_inbox():
 @app.route("/api/message/<message_id>")
 def api_get_message(message_id: str):
     """Return message details as JSON. Use lazy=1 for instant load without AI."""
-    uid = session.get("user_id")
+    uid = get_auth_user()
     creds = load_credentials(uid)
     if not creds:
         return jsonify({"error": "not authenticated"}), 401
@@ -554,7 +574,7 @@ def api_analyze_message(message_id: str):
     """Get AI analysis for a message (for lazy loading).
     Also persists the email + analysis to DB so RAG chat can find it.
     """
-    uid = session.get("user_id")
+    uid = get_auth_user()
     creds = load_credentials(uid)
     if not creds:
         return jsonify({"error": "not authenticated"}), 401
@@ -637,7 +657,7 @@ def api_analyze_message(message_id: str):
 @app.route("/api/attachment/<message_id>/<attachment_id>")
 def api_get_attachment(message_id: str, attachment_id: str):
     """Download an attachment from a Gmail message."""
-    uid = session.get("user_id")
+    uid = get_auth_user()
     creds = load_credentials(uid)
     if not creds:
         return jsonify({"error": "not authenticated"}), 401
@@ -676,7 +696,7 @@ def api_get_attachment(message_id: str, attachment_id: str):
 @app.route("/api/chat", methods=["POST"])
 def api_chat():
     """Handle chat requests for the RAG-powered inbox chat."""
-    uid = session.get("user_id")
+    uid = get_auth_user()
     if not uid:
         return jsonify({"error": "Unauthorized"}), 401
     
@@ -729,7 +749,7 @@ def api_chat():
 @app.route("/api/prioritize", methods=["POST"])
 def api_prioritize():
     """Prioritize multiple messages at once."""
-    uid = session.get("user_id")
+    uid = get_auth_user()
     creds = load_credentials(uid)
     if not creds:
         return jsonify({"error": "not authenticated"}), 401
@@ -804,14 +824,18 @@ def oauth2callback():
     
     session["user_id"] = user_id
     save_credentials(user_id, creds)
-    # Redirect to React frontend
-    return redirect(f"{FRONTEND_URL}/inbox")
+    
+    # Generate persistent session token for no-cookie auth
+    odin_token = create_session_token(user_id)
+    
+    # Redirect to React frontend with token and success flag
+    return redirect(f"{FRONTEND_URL}/inbox?token={odin_token}&auth=success")
 
 
 @app.route("/logout")
 def logout():
     """Log out and clear session, including cached data."""
-    uid = session.get("user_id")
+    uid = get_auth_user()
     if uid:
         # Delete token file
         p = token_path_for_user(uid)
@@ -857,7 +881,7 @@ def analytics():
 @app.route("/generate_reply/<message_id>", methods=["POST"])
 def generate_reply_endpoint(message_id: str):
     """Generate an AI-powered reply for a message."""
-    uid = session.get("user_id")
+    uid = get_auth_user()
     creds = load_credentials(uid)
     if not creds:
         return jsonify({"error": "not authenticated"}), 401
@@ -881,7 +905,7 @@ def generate_reply_endpoint(message_id: str):
 @app.route("/send_reply/<message_id>", methods=["POST"])
 def send_reply_endpoint(message_id: str):
     """Send a reply email via Gmail API."""
-    uid = session.get("user_id")
+    uid = get_auth_user()
     creds = load_credentials(uid)
     if not creds:
         return jsonify({"error": "not authenticated"}), 401
@@ -933,7 +957,7 @@ def send_reply_endpoint(message_id: str):
 @app.route("/api/compose", methods=["POST"])
 def api_compose():
     """Compose and send a new email."""
-    uid = session.get("user_id")
+    uid = get_auth_user()
     creds = load_credentials(uid)
     if not creds:
         return jsonify({"error": "not authenticated"}), 401
@@ -1005,7 +1029,7 @@ def api_compose():
 @app.route("/api/inbox/check")
 def api_inbox_check():
     """Quick check for new emails - returns count and latest ID for polling."""
-    uid = session.get("user_id")
+    uid = get_auth_user()
     creds = load_credentials(uid)
     if not creds:
         return jsonify({"error": "not authenticated"}), 401
@@ -1036,7 +1060,7 @@ def api_inbox_check():
 @app.route("/api/message/<message_id>/delete", methods=["POST"])
 def api_delete_message(message_id: str):
     """Move a message to Gmail trash and remove from local cache."""
-    uid = session.get("user_id")
+    uid = get_auth_user()
     creds = load_credentials(uid)
     if not creds:
         return jsonify({"error": "not authenticated"}), 401
@@ -1070,7 +1094,7 @@ def health_check():
 
 @socketio.on('connect')
 def handle_connect():
-    uid = session.get("user_id")
+    uid = get_auth_user()
     if uid:
         join_room(uid)
         print(f"📡 User {uid} connected to WebSockets")

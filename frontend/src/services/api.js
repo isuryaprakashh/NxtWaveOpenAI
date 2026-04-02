@@ -6,11 +6,14 @@ async function fetchJSON(url, options = {}) {
     // Prefix URL with base if absolute path
     const targetUrl = url.startsWith('/') ? `${BASE_URL}${url}` : url;
     
+    const token = localStorage.getItem('odin_auth_token');
+    
     const response = await fetch(targetUrl, {
         ...options,
         credentials: 'include',  // Include cookies for session
         headers: {
             'Content-Type': 'application/json',
+            ...(token ? { 'X-Odin-Token': token } : {}), // Add token header if available
             ...options.headers,
         },
     });
@@ -24,8 +27,23 @@ async function fetchJSON(url, options = {}) {
 }
 
 // Auth APIs
-export const checkAuth = () => fetchJSON('/api/auth/check').catch(() => ({ authenticated: false }));
-export const logout = () => fetch(`${BASE_URL}/logout`, { credentials: 'include' });
+export const checkAuth = () => {
+    // 1. Check if token is in URL (first visit after Google login)
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+    if (token) {
+        localStorage.setItem('odin_auth_token', token);
+        // Clean the URL to keep it pretty
+        window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
+    return fetchJSON('/api/auth/check').catch(() => ({ authenticated: false }));
+};
+
+export const logout = () => {
+    localStorage.removeItem('odin_auth_token');
+    return fetch(`${BASE_URL}/logout`, { credentials: 'include' });
+};
 
 // Inbox APIs
 export const fetchInbox = (query = '', pageToken = '', folder = 'inbox') => {

@@ -3,6 +3,7 @@ MongoDB Database module for storing email metadata and analytics.
 Optimized for JSON-native data and performance.
 """
 import os
+import secrets
 import json
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -353,6 +354,45 @@ def load_user_token(user_id: str) -> Optional[Dict]:
         return json.loads(decrypted_json)
     except Exception as e:
         print(f"Error loading/decrypting token: {e}")
+        return None
+
+# ============ Session Token Management (No-Cookie Auth) ============
+
+def create_session_token(user_id: str) -> str:
+    """Generate a secure session token and store it in MongoDB."""
+    db = get_db()
+    token = secrets.token_urlsafe(48)
+    try:
+        # Sessions expire in 24 hours
+        db.sessions.update_one(
+            {"user_id": user_id},
+            {"$set": {
+                "user_id": user_id,
+                "token": token,
+                "created_at": datetime.utcnow()
+            }},
+            upsert=True
+        )
+        return token
+    except Exception as e:
+        print(f"Error creating session token: {e}")
+        return ""
+
+def validate_session_token(token: str) -> Optional[str]:
+    """Retrieve user_id for a given session token if valid."""
+    if not token:
+        return None
+    db = get_db()
+    try:
+        res = db.sessions.find_one({"token": token})
+        if res:
+            # Simple check: is it older than 24h?
+            delta = datetime.utcnow() - res["created_at"]
+            if delta.total_seconds() < 86400: # 1 day
+                return res["user_id"]
+        return None
+    except Exception as e:
+        print(f"Error validating session token: {e}")
         return None
 
 # Initialize on import

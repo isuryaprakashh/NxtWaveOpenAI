@@ -19,7 +19,9 @@ def get_backend_port():
 
 def get_frontend_url():
     """Retrieve the frontend URL for CORS and redirects."""
-    raw_url = os.environ.get("FRONTEND_URL", PROD_FRONTEND_URL)
+    raw_url = os.environ.get("FRONTEND_URL")
+    if not raw_url:
+        raw_url = PROD_FRONTEND_URL
     return raw_url.rstrip('/')
 
 def get_redirect_uri():
@@ -40,9 +42,11 @@ def get_redirect_uri():
 def get_cors_origins():
     """Generate the list of allowed CORS origins."""
     fe_url = get_frontend_url()
-    return [
+    origins = [
         fe_url,
         f"{fe_url}/",
         LOCAL_FRONTEND_URL,
         f"{LOCAL_FRONTEND_URL}/"
     ]
+    print(f"🔓 CORS origins enabled for: {origins}")
+    return origins
