@@ -48,7 +48,11 @@ DEBUG = os.getenv("FLASK_DEBUG", "true").lower() == "true"
 if DEBUG:
     os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
+from werkzeug.middleware.proxy_fix import ProxyFix
+
 app = Flask(__name__)
+# Fix for Render/Vercel proxies so redirect_uri uses https
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 socketio = SocketIO(app, cors_allowed_origins="*")
 analysis_executor = ThreadPoolExecutor(max_workers=5)
 
