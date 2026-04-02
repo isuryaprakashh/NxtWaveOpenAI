@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { checkAuth } from '../services/api';
+import { checkAuth, BASE_URL } from '../services/api';
 
 export default function Navbar() {
     const location = useLocation();
@@ -81,14 +81,14 @@ export default function Navbar() {
                 <div className="hidden md:flex items-center justify-end w-48 gap-3">
                     {isAuthenticated ? (
                         <a 
-                            href="/logout" 
+                            href={`${BASE_URL}/logout`}
                             onClick={(e) => {
                                 e.preventDefault();
                                 // Clear all cached data before logout
                                 sessionStorage.clear();
                                 localStorage.clear(); // Complete wipe for clean logout
                                 // Now proceed to backend logout
-                                window.location.href = "/logout";
+                                window.location.href = `${BASE_URL}/logout`;
                             }}
                             className="btn-primary !bg-none !bg-gray-100 hover:!bg-gray-200 !text-gray-700 !px-5 !py-2.5 !text-[0.75rem] !font-bold uppercase tracking-wider !shadow-none"
                         >
@@ -96,7 +96,7 @@ export default function Navbar() {
                         </a>
                     ) : (
                         <a 
-                            href="/login" 
+                            href={`${BASE_URL}/login`}
                             className="btn-primary !px-5 !py-2.5 !text-[0.75rem] !font-bold uppercase tracking-wider !shadow-md"
                         >
                             Sign In

@@ -62,6 +62,10 @@ if not SECRET_KEY:
         raise EnvironmentError("FLASK_SECRET_KEY environment variable is required in production")
         
 app.secret_key = SECRET_KEY
+app.config.update(
+    SESSION_COOKIE_SAMESITE='None',
+    SESSION_COOKIE_SECURE=True,
+)
 
 # Google OAuth Configuration
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")

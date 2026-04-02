@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { checkAuth } from "../services/api";
+import { checkAuth, BASE_URL } from "../services/api";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 
@@ -118,7 +118,7 @@ export default function HomePage() {
                         </a>
                     ) : (
                         <>
-                            <a href="/login" className="btn-primary !px-10 !py-4 shadow-xl text-[1.05rem] hover:scale-105 transition-transform">
+                            <a href={`${BASE_URL}/login`} className="btn-primary !px-10 !py-4 shadow-xl text-[1.05rem] hover:scale-105 transition-transform">
                                 Unlock Your Intelligence ❯
                             </a>
                         </>
