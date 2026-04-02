@@ -1,5 +1,5 @@
 // API service for communicating with Flask backend
-import { API_BASE_URL as BASE_URL } from '../config';
+export { API_BASE_URL as BASE_URL } from '../config';
 
 // Helper for JSON requests
 async function fetchJSON(url, options = {}) {
