@@ -1,131 +1,107 @@
-# 🤖 ODIN - AI Email Assistant
+# 🔱 Odin Mail — AI Email Assistant
 
-A comprehensive AI-powered email management system with **React frontend** and **Flask backend**, using **Google Gemini 2.5 Flash** for intelligent email analysis with **Groq fallback** for reliability.
-
-## ✨ Features
-
-### Core AI Features
-- ✅ **AI Summarization** - Concise summaries with action items
-- ✅ **Priority Classification** - HIGH/MEDIUM/LOW auto-assignment
-- ✅ **Sentiment Analysis** - Positive/Negative/Neutral detection
-- ✅ **Smart Categorization** - Urgent Support, Work, Personal, Newsletter, Spam
-- ✅ **Quick Replies** - AI-suggested contextual reply options
-- ✅ **Reply Generation** - Context-aware drafts with customizable tone
-- ✅ **Chat with Inbox** - Ask natural language questions (RAG)
-- ✅ **Analytics Dashboard** - Visual insights with charts
-- ✅ **Groq Fallback** - Automatic fallback to Groq if Gemini fails
-
-### New Features
-- ✅ **Compose Email** - Write and send new emails directly
-- ✅ **Real-time Sync** - 30-second polling with notification badges
-- ✅ **Mobile Responsive** - Hamburger menu for mobile devices
-- ✅ **Error Boundary** - Graceful error handling
-
-### UI/UX
-- 🎨 **Modern Design** - Inter font, smooth animations, custom scrollbars
-- 📱 **Responsive Navbar** - Desktop & mobile support
-- ⌨️ **Keyboard Shortcuts** - Ctrl+Enter to send in Chat
-- ⚡ **Instant Loading** - Session-based inbox caching
-
-## 🏗️ Architecture
-
-```
-ODIN/
-├── frontend/                   # React + Tailwind CSS (Vite)
-│   └── src/
-│       ├── components/
-│       │   ├── Navbar.jsx      # Responsive navigation
-│       │   ├── ComposeModal.jsx # Email compose
-│       │   └── ErrorBoundary.jsx
-│       ├── pages/
-│       │   ├── HomePage.jsx    # Landing page
-│       │   ├── InboxPage.jsx   # Email list + FAB
-│       │   ├── MessagePage.jsx # Email detail + AI
-│       │   ├── ChatPage.jsx    # RAG chat
-│       │   └── AnalyticsPage.jsx
-│       └── services/api.js     # API layer
-├── app.py                      # Flask backend
-├── openai_helpers.py           # AI functions (Gemini + Groq)
-├── database.py                 # SQLite operations
-└── email_data.db               # Database (auto-created)
-```
-
-## 🚀 Quick Start
-
-### 1. Backend Setup
-```bash
-pip install -r requirements.txt
-```
-
-### 2. Frontend Setup
-```bash
-cd frontend
-npm install
-```
-
-### 3. Configure `.env`
-```env
-FLASK_SECRET_KEY=your-secret-key
-GEMINI_API_KEY=your-gemini-api-key
-GROQ_API_KEY=your-groq-api-key    # Optional: Fallback AI
-```
-
-> **Note:** Gemini is the primary AI. If Gemini fails, the system automatically falls back to Groq (LLaMA 3.3 70B).
-
-### 4. Run the Application
-```bash
-# Terminal 1 - Backend
-python app.py
-
-# Terminal 2 - Frontend
-cd frontend
-npm run dev
-```
-
-Visit `http://localhost:5173`
-
-## 🔧 Technical Stack
-
-| Layer | Technology |
-|-------|------------|
-| **Frontend** | React, Tailwind CSS, Vite |
-| **Backend** | Python, Flask |
-| **AI (Primary)** | Google Gemini 2.5 Flash |
-| **AI (Fallback)** | Groq (LLaMA 3.3 70B Versatile) |
-| **Database** | SQLite |
-| **Email** | Gmail API |
-| **Auth** | Google OAuth 2.0 |
-
-## � API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/auth/check` | GET | Check authentication |
-| `/api/inbox` | GET | Fetch inbox emails |
-| `/api/inbox/check` | GET | Poll for new emails |
-| `/api/message/<id>` | GET | Get email details + AI analysis |
-| `/api/compose` | POST | Send new email |
-| `/api/chat` | POST | Chat with inbox (RAG) |
-| `/api/analytics` | GET | Analytics data |
-| `/generate_reply/<id>` | POST | Generate AI reply |
-| `/send_reply/<id>` | POST | Send reply |
-
-## 🐛 Troubleshooting
-
-### "GEMINI_API_KEY not set"
-- Get key from [Google AI Studio](https://aistudio.google.com/apikey)
-- Add to `.env` file (no quotes!)
-
-### OAuth "Access blocked"
-- Add email as test user in Google Cloud Console
-
-### CSS/Build errors
-- Restart frontend: `npm run dev`
-
-## 📝 License
-
-MIT License
+**Odin Mail** is a premium, high-performance AI email management platform that turns your cluttered inbox into a strategic asset. Built with **React** and **Flask**, it leverages **Google Gemini 2.0 Flash** (with **Groq LLaMA 3.3 70B fallback**) to provide instant summaries, priority assessment, and a RAG-powered chat interface to talk directly to your data.
 
 ---
 
-Built with ❤️ using Google Gemini 2.5 Flash + React
+## ✨ Key Features
+
+### 🧠 Intelligent Inbox
+- **AI Summarization**: Get the "gist" of long threads in a single sentence.
+- **Priority Detection**: Automated **HIGH / MEDIUM / LOW** labeling based on content and urgency.
+- **Sentiment & Category**: Instant detection of sender mood and category (Work, Support, Personal, etc.).
+- **Smart Replies**: One-tap AI-suggested responses tailored to the email context.
+
+### 💬 RAG Chat (Chat with Inbox)
+- Ask natural language questions like *"What were the action items from John's last email?"* or *"Summarize my recent invoices."*
+- Uses **Retrieve-Augmented Generation** to search your MongoDB cache for instant, accurate answers.
+
+### 📊 Professional Analytics
+- Visual distribution of your inbox by priority and sentiment.
+- Category breakdown to see where your time is going.
+
+### 🔒 Enterprise-Grade Stability
+- **Token-Based Authentication**: Custom auth system designed specifically for cross-domain stability (Vercel + Render).
+- **Socket.io Integration**: Real-time notifications for new emails.
+- **Encryption**: sensitive GMAIL OAuth tokens are encrypted at rest using AES (Fernet).
+
+---
+
+## 🏗️ Project Architecture
+
+```text
+ODIN-MAIL/
+├── backend/                # Flask Python Server
+│   ├── app.py              # Main API & WebSocket logic
+│   ├── database.py         # MongoDB Operations (Encrypted)
+│   ├── config.py           # Environment-aware configuration
+│   └── openai_helpers.py   # AI Core (Gemini + Groq)
+├── frontend/               # React + Vite Client
+│   ├── src/
+│   │   ├── services/api.js # Auth-Token-Aware API layer
+│   │   ├── config.js       # Centralized service discovery
+│   │   └── pages/          # Inbox, Chat, Analytics, Message
+└── README.md               # You are here
+```
+
+---
+
+## 🚀 Quick Start
+
+### 1. Backend Setup (Flask)
+```bash
+cd backend
+pip install -r requirements.txt
+python app.py
+```
+
+### 2. Frontend Setup (React)
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+### 3. Environment Variables (.env)
+Create a `.env` in the `backend/` folder:
+```env
+# AI Keys
+GEMINI_API_KEY=your_key
+GROQ_API_KEY=your_key_fallback
+
+# Database (MongoDB)
+MONGO_URI=your_mongodb_atlas_uri
+
+# Google OAuth
+GOOGLE_CLIENT_ID=your_id
+GOOGLE_CLIENT_SECRET=your_secret
+
+# Security
+ENCRYPTION_KEY=generate_with_fernet
+FLASK_SECRET_KEY=your_system_secret
+```
+
+---
+
+## 🔧 Technical Stack
+
+| Category | Technology |
+| :--- | :--- |
+| **Frontend** | React 18, Tailwind CSS, Vite |
+| **Backend** | Python 3.12, Flask, Flask-SocketIO |
+| **AI Models** | Google Gemini 2.0 Flash, LLaMA 3.3 70B (Groq) |
+| **Database** | MongoDB (NoSQL) |
+| **Real-time** | Socket.IO |
+| **Authentication** | Google OAuth 2.0 + Custom Token Persistence |
+
+---
+
+## 🐛 Build & Deployment
+
+- **Frontend**: Professionally deployed on **Vercel**.
+- **Backend**: Scalable containerized service on **Render**.
+- **Database**: **MongoDB Atlas** for managed high-availability data storage.
+
+---
+
+Built with ❤️ for the next generation of productivity.
