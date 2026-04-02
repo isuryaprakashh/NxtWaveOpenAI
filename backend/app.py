@@ -35,12 +35,10 @@ from database import (
     get_email_by_id, 
     search_emails, 
     delete_email_by_id,
-    save_emails_batch,
-    get_emails_by_user,
     save_user_token,
     load_user_token,
-    create_session_token,     # NEW: For no-cookie auth
-    validate_session_token    # NEW: For no-cookie auth
+    create_session_token,
+    validate_session_token
 )
 from config import (
     get_backend_port, 
@@ -87,6 +85,7 @@ GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 REDIRECT_URI = get_redirect_uri()
 print(f"🛡️ Odin Security: v2.0 (Token Auth Active)")
 print(f"📡 Backend initialized with REDIRECT_URI: {REDIRECT_URI}")
+print(f"📡 FRONTEND_URL allowed: {get_frontend_url()}")
 SCOPES = os.getenv(
     "SCOPES", 
     "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send"
@@ -97,7 +96,13 @@ TOKEN_STORE.mkdir(exist_ok=True)
 
 FRONTEND_URL = get_frontend_url()
 origins = get_cors_origins()
-CORS(app, supports_credentials=True, origins=origins, allow_headers=["Content-Type", "X-Odin-Token"])
+# Update CORS to allow any header for local/dev stability
+CORS(app, 
+    supports_credentials=True, 
+    origins=origins, 
+    allow_headers=["*"],
+    methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+)
 
 # ============ Regex Patterns ============
 EMAIL_PATTERN = re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b')
@@ -337,8 +342,10 @@ def get_auth_user():
 @app.route("/api/auth/check")
 def api_auth_check():
     """Check if user is authenticated via Cookie OR Header Token."""
+    token = request.headers.get("X-Odin-Token")
+    print(f"🕵️ Auth Check - Header received: {'[YES]' if token else '[NO]'}")
     uid = get_auth_user()
-    creds = load_credentials(uid)
+    creds = load_user_token(uid)
     if creds:
         return jsonify({"authenticated": True, "user_id": uid})
     return jsonify({"authenticated": False}), 401
@@ -348,7 +355,7 @@ def api_auth_check():
 def api_inbox():
     """Return inbox emails as JSON for React frontend. Checks MongoDB first for speed."""
     uid = get_auth_user()
-    creds = load_credentials(uid)
+    creds = load_user_token(uid)
     if not creds:
         return jsonify({"error": "not authenticated"}), 401
     
@@ -445,7 +452,7 @@ def api_inbox():
 def api_get_message(message_id: str):
     """Return message details as JSON. Use lazy=1 for instant load without AI."""
     uid = get_auth_user()
-    creds = load_credentials(uid)
+    creds = load_user_token(uid)
     if not creds:
         return jsonify({"error": "not authenticated"}), 401
     
@@ -576,7 +583,7 @@ def api_analyze_message(message_id: str):
     Also persists the email + analysis to DB so RAG chat can find it.
     """
     uid = get_auth_user()
-    creds = load_credentials(uid)
+    creds = load_user_token(uid)
     if not creds:
         return jsonify({"error": "not authenticated"}), 401
     
@@ -659,7 +666,7 @@ def api_analyze_message(message_id: str):
 def api_get_attachment(message_id: str, attachment_id: str):
     """Download an attachment from a Gmail message."""
     uid = get_auth_user()
-    creds = load_credentials(uid)
+    creds = load_user_token(uid)
     if not creds:
         return jsonify({"error": "not authenticated"}), 401
     
@@ -751,7 +758,7 @@ def api_chat():
 def api_prioritize():
     """Prioritize multiple messages at once."""
     uid = get_auth_user()
-    creds = load_credentials(uid)
+    creds = load_user_token(uid)
     if not creds:
         return jsonify({"error": "not authenticated"}), 401
     
@@ -883,7 +890,7 @@ def analytics():
 def generate_reply_endpoint(message_id: str):
     """Generate an AI-powered reply for a message."""
     uid = get_auth_user()
-    creds = load_credentials(uid)
+    creds = load_user_token(uid)
     if not creds:
         return jsonify({"error": "not authenticated"}), 401
 
@@ -907,7 +914,7 @@ def generate_reply_endpoint(message_id: str):
 def send_reply_endpoint(message_id: str):
     """Send a reply email via Gmail API."""
     uid = get_auth_user()
-    creds = load_credentials(uid)
+    creds = load_user_token(uid)
     if not creds:
         return jsonify({"error": "not authenticated"}), 401
 
@@ -959,7 +966,7 @@ def send_reply_endpoint(message_id: str):
 def api_compose():
     """Compose and send a new email."""
     uid = get_auth_user()
-    creds = load_credentials(uid)
+    creds = load_user_token(uid)
     if not creds:
         return jsonify({"error": "not authenticated"}), 401
 
@@ -1031,7 +1038,7 @@ def api_compose():
 def api_inbox_check():
     """Quick check for new emails - returns count and latest ID for polling."""
     uid = get_auth_user()
-    creds = load_credentials(uid)
+    creds = load_user_token(uid)
     if not creds:
         return jsonify({"error": "not authenticated"}), 401
 
@@ -1062,7 +1069,7 @@ def api_inbox_check():
 def api_delete_message(message_id: str):
     """Move a message to Gmail trash and remove from local cache."""
     uid = get_auth_user()
-    creds = load_credentials(uid)
+    creds = load_user_token(uid)
     if not creds:
         return jsonify({"error": "not authenticated"}), 401
 

@@ -18,23 +18,33 @@ def get_backend_port():
     return int(os.environ.get("PORT", LOCAL_BACKEND_PORT))
 
 def get_frontend_url():
-    """Retrieve the frontend URL for CORS and redirects."""
+    """Retrieve the frontend URL for CORS and redirects, auto-detecting for debug mode."""
+    # Detect local vs production
+    # 1. Check FLASK_DEBUG
+    # 2. Check if we are NOT on Render (which sets RENDER_EXTERNAL_URL)
+    is_debug_flag = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
+    is_on_render = os.environ.get("RENDER") is not None
+    
+    is_local = is_debug_flag or (not is_on_render)
+    
+    default_url = LOCAL_FRONTEND_URL if is_local else PROD_FRONTEND_URL
+    
     raw_url = os.environ.get("FRONTEND_URL")
     if not raw_url:
-        raw_url = PROD_FRONTEND_URL
+        raw_url = default_url
+        
     return raw_url.rstrip('/')
 
 def get_redirect_uri():
     """Retrieve the Google OAuth redirect URI."""
-    # Always prioritize the environment variable if set
-    env_uri = os.environ.get("GOOGLE_OAUTH_REDIRECT_URI")
-    if env_uri:
-        return env_uri
+    # 1. Check FLASK_DEBUG
+    # 2. Check if we are NOT on Render (which sets RENDER environment variable)
+    is_debug_flag = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
+    is_on_render = os.environ.get("RENDER") is not None
     
-    # If we are in local debug mode, use localhost
-    # Otherwise, always default to production to prevent redirect errors on Render
-    is_debug = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
-    if is_debug:
+    is_local = is_debug_flag or (not is_on_render)
+
+    if is_local:
         return f"{LOCAL_BACKEND_URL}/oauth2callback"
     
     return f"{PROD_BACKEND_URL}/oauth2callback"
