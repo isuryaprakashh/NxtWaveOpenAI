@@ -70,7 +70,7 @@ app.config.update(
 # Google OAuth Configuration
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
-REDIRECT_URI = os.getenv("GOOGLE_OAUTH_REDIRECT_URI", "http://localhost:5000/oauth2callback")
+REDIRECT_URI = os.getenv("GOOGLE_OAUTH_REDIRECT_URI", "https://nxtwaveopenai.onrender.com/oauth2callback")
 SCOPES = os.getenv(
     "SCOPES", 
     "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send"
