@@ -40,6 +40,12 @@ from database import (
     save_user_token,
     load_user_token
 )
+from config import (
+    get_backend_port, 
+    get_frontend_url, 
+    get_redirect_uri, 
+    get_cors_origins
+)
 
 # ============ Configuration ============
 DEBUG = os.getenv("FLASK_DEBUG", "true").lower() == "true"
@@ -74,7 +80,7 @@ app.config.update(
 # Google OAuth Configuration
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
-REDIRECT_URI = os.getenv("GOOGLE_OAUTH_REDIRECT_URI", "https://nxtwaveopenai.onrender.com/oauth2callback")
+REDIRECT_URI = get_redirect_uri()
 SCOPES = os.getenv(
     "SCOPES", 
     "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send"
@@ -83,13 +89,8 @@ SCOPES = os.getenv(
 TOKEN_STORE = Path("./tokens")
 TOKEN_STORE.mkdir(exist_ok=True)
 
-DEBUG = os.getenv("FLASK_DEBUG", "True").lower() == "true"
-# Frontend URL for redirects - fallback to production if not set in environment
-raw_frontend_url = os.getenv("FRONTEND_URL", "https://odin-mail-dusky.vercel.app")
-FRONTEND_URL = raw_frontend_url.rstrip('/')
-
-# Enable CORS for the frontend (Allow both with and without trailing slash for stability)
-origins = [FRONTEND_URL, FRONTEND_URL + "/", "http://localhost:5173"]
+FRONTEND_URL = get_frontend_url()
+origins = get_cors_origins()
 CORS(app, supports_credentials=True, origins=origins)
 
 # ============ Regex Patterns ============
@@ -1084,6 +1085,6 @@ def handle_disconnect():
 # ============ Entry Point ============
 
 if __name__ == "__main__":
-    # Render provides $PORT, fallback to 5000 for local
-    port = int(os.environ.get("PORT", 5000))
+    # Render provides $PORT, fallback to 5000 for local via config
+    port = get_backend_port()
     socketio.run(app, debug=DEBUG, port=port, host="0.0.0.0")

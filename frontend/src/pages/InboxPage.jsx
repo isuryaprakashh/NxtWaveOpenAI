@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import ComposeModal from "../components/ComposeModal";
-import { fetchInbox, fetchMessage, fetchAnalysis, checkInbox, checkAuth, deleteEmail, BASE_URL } from "../services/api";
+import { fetchInbox, fetchMessage, fetchAnalysis, checkInbox, checkAuth, deleteEmail } from "../services/api";
+import { WS_URL } from "../config";
 import { saveEmailsToDB, getEmailsFromDB, clearEmailsForUser } from "../services/db";
 import { io } from "socket.io-client";
 import ReactMarkdown from "react-markdown";
@@ -219,7 +220,7 @@ export default function InboxPage({ folder = 'inbox' }) {
     useEffect(() => {
         if (!userId) return;
 
-        const socket = io(BASE_URL || "http://localhost:5000", {
+        const socket = io(WS_URL, {
             withCredentials: true,
             transports: ["websocket"]
         });

@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import Navbar from "../components/Navbar";
-import { fetchMessage, fetchAnalysis, generateReply, sendReply as apiSendReply, deleteEmail, BASE_URL } from "../services/api";
+import { fetchMessage, fetchAnalysis, generateReply, sendReply as apiSendReply, deleteEmail } from "../services/api";
+import { WS_URL } from "../config";
 import { io } from "socket.io-client";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -32,7 +33,7 @@ export default function MessagePage() {
 
     // Real-time AI analysis updates
     useEffect(() => {
-        const socket = io(BASE_URL || "http://localhost:5000", {
+        const socket = io(WS_URL, {
             withCredentials: true,
             transports: ["websocket"]
         });
