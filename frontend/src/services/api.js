@@ -23,7 +23,11 @@ async function fetchJSON(url, options = {}) {
         throw new Error(error.error || `HTTP ${response.status}`);
     }
 
-    return response.json();
+    const json = await response.json();
+    if (url === '/api/auth/check') {
+        console.log("🔒 Auth Check Result:", json.authenticated ? "Authenticated ✅" : "Not Authenticated 🛑");
+    }
+    return json;
 }
 
 // Auth APIs

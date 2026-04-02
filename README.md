@@ -103,5 +103,3 @@ FLASK_SECRET_KEY=your_system_secret
 - **Database**: **MongoDB Atlas** for managed high-availability data storage.
 
 ---
-
-Built with ❤️ for the next generation of productivity.

@@ -96,7 +96,7 @@ TOKEN_STORE.mkdir(exist_ok=True)
 
 FRONTEND_URL = get_frontend_url()
 origins = get_cors_origins()
-CORS(app, supports_credentials=True, origins=origins)
+CORS(app, supports_credentials=True, origins=origins, allow_headers=["Content-Type", "X-Odin-Token"])
 
 # ============ Regex Patterns ============
 EMAIL_PATTERN = re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b')
