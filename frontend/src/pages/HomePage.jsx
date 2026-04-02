@@ -108,7 +108,7 @@ export default function HomePage() {
                 </h1>
 
                 <p className="text-lg md:text-xl text-[#555] max-w-2xl mx-auto mb-12 leading-relaxed font-medium animate-fade-up delay-300">
-                    ODIN is the AI-first email layer that handles the noise, prioritizes what matters, and writes for you.
+                    Odin Mail is the AI-first email layer that handles the noise, prioritizes what matters, and writes for you.
                 </p>
 
                 <div className="flex flex-col items-center animate-fade-up delay-400 mb-20">
@@ -182,7 +182,7 @@ export default function HomePage() {
                         <span className="text-[#6b6bf9] font-bold tracking-[0.2em] text-[0.6rem] uppercase mb-4 block opacity-70">The Intelligence Brief</span>
                         <h2 className="font-display text-[3rem] text-gray-900 leading-[1.1] mb-6">Never read a full thread again.</h2>
                         <p className="text-gray-500 text-base leading-relaxed mb-10 font-medium">
-                            ODIN's neural engine analyzes every incoming message in real-time, providing you with a high-fidelity summary before you even open it.
+                            Odin Mail's neural engine analyzes every incoming message in real-time, providing you with a high-fidelity summary before you even open it.
                         </p>
                         <ul className="space-y-4">
                             {["Action items extracted automatically", "Sentiment & urgency detection", "Smart attachment indexing"].map((item, i) => (
@@ -210,7 +210,7 @@ export default function HomePage() {
                                 <div className="h-3 w-[95%] bg-gray-100 rounded-full"></div>
                             </div>
                             <div className="bg-[#6b6bf9]/5 p-6 rounded-2xl border border-[#6b6bf9]/10">
-                                <div className="text-[0.55rem] font-black text-[#6b6bf9] tracking-widest uppercase mb-4 opacity-50">ODIN SUMMARY</div>
+                                <div className="text-[0.55rem] font-black text-[#6b6bf9] tracking-widest uppercase mb-4 opacity-50">ODIN MAIL SUMMARY</div>
                                 <div className="h-2.5 w-[85%] bg-[#6b6bf9]/20 rounded-full mb-3"></div>
                                 <div className="h-2.5 w-[70%] bg-[#6b6bf9]/20 rounded-full"></div>
                             </div>

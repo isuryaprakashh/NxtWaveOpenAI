@@ -5,7 +5,7 @@ const Footer = () => {
         <footer className="bg-white py-20 px-8 relative z-10 border-t border-black/5">
             <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-12">
                 <div className="col-span-2">
-                    <div className="font-display text-2xl tracking-tighter text-gray-900 mb-6">odin.</div>
+                    <div className="font-display text-2xl tracking-tighter text-gray-900 mb-6">Odin Mail</div>
                     <p className="text-gray-400 text-sm max-w-xs leading-relaxed font-medium">
                         The intelligent email layer for the next generation of productivity.
                     </p>

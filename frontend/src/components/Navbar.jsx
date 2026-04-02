@@ -41,7 +41,7 @@ export default function Navbar() {
                     className="flex items-center gap-2 group w-48" // w-48 keeps logo area balanced with right CTA area
                 >
                     <span className="font-display text-2xl tracking-tighter text-gray-900 group-hover:opacity-70 transition-opacity">
-                        odin.
+                        Odin Mail
                     </span>
                 </Link>
 
