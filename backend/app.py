@@ -81,6 +81,7 @@ app.config.update(
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 REDIRECT_URI = get_redirect_uri()
+print(f"📡 Backend initialized with REDIRECT_URI: {REDIRECT_URI}")
 SCOPES = os.getenv(
     "SCOPES", 
     "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send"

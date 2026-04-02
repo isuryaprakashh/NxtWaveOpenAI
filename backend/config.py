@@ -29,11 +29,13 @@ def get_redirect_uri():
     if env_uri:
         return env_uri
     
-    # Fallback to production Render URL if not local
-    if os.environ.get("RENDER"):
-        return f"{PROD_BACKEND_URL}/oauth2callback"
+    # If we are in local debug mode, use localhost
+    # Otherwise, always default to production to prevent redirect errors on Render
+    is_debug = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
+    if is_debug:
+        return f"{LOCAL_BACKEND_URL}/oauth2callback"
     
-    return f"{LOCAL_BACKEND_URL}/oauth2callback"
+    return f"{PROD_BACKEND_URL}/oauth2callback"
 
 def get_cors_origins():
     """Generate the list of allowed CORS origins."""
