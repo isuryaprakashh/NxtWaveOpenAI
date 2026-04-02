@@ -1,5 +1,6 @@
 // API service for communicating with Flask backend
 export { API_BASE_URL as BASE_URL } from '../config';
+console.log("🛡️ Odin Security: v2.0 (Token Auth Active)");
 
 // Helper for JSON requests
 async function fetchJSON(url, options = {}) {
