@@ -1,19 +1,22 @@
-// API service for communicating with Flask backend
-export { API_BASE_URL as BASE_URL } from '../config';
+import { API_BASE_URL as BASE_URL } from '../config';
+export { BASE_URL };
 console.log("🛡️ Odin Security: v2.0 (Token Auth Active)");
 
 // Helper for JSON requests
 async function fetchJSON(url, options = {}) {
     // Prefix URL with base if absolute path
-    const targetUrl = url.startsWith('/') ? `${BASE_URL}${url}` : url;
-    
     const token = localStorage.getItem('odin_auth_token');
+    const targetUrl = url.startsWith('http') ? url : `${BASE_URL}${url}`;
+    
+    if (url === '/api/auth/check') {
+        console.log("🔑 Auth Check - Token in Storage:", token ? "FOUND (masked)" : "NOT FOUND");
+    }
     
     const response = await fetch(targetUrl, {
         ...options,
         credentials: 'include',  // Include cookies for session
         headers: {
-            'Content-Type': 'application/json',
+            'Content-Type': 'application\/json',
             ...(token ? { 'X-Odin-Token': token } : {}), // Add token header if available
             ...options.headers,
         },

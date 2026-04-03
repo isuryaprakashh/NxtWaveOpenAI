@@ -20,6 +20,7 @@ export default function MessagePage() {
     const [status, setStatus] = useState(null);
     const [confirmModal, setConfirmModal] = useState({ open: false, title: '', message: '', onConfirm: null, danger: false, confirmLabel: 'Confirm' });
     const [previewAtt, setPreviewAtt] = useState(null); // { filename, mimeType, url }
+    const [isCopied, setIsCopied] = useState(false);
 
     const location = useLocation();
     const queryParams = new URLSearchParams(location.search);
@@ -31,11 +32,20 @@ export default function MessagePage() {
 
     const getAttUrl = (att) => `/api/attachment/${id}/${att.attachmentId}?filename=${encodeURIComponent(att.filename)}&mimeType=${encodeURIComponent(att.mimeType)}`;
 
+    const handleCopyBody = () => {
+        const textToCopy = mail.body.replace(/<[^>]*>/g, ''); // Simple strip HTML for clip
+        navigator.clipboard.writeText(textToCopy);
+        setIsCopied(true);
+        setTimeout(() => setIsCopied(false), 2000);
+    };
+
     // Real-time AI analysis updates
     useEffect(() => {
+        const token = localStorage.getItem('odin_auth_token');
         const socket = io(WS_URL, {
             withCredentials: true,
-            transports: ["websocket"]
+            transports: ["websocket"],
+            auth: { token }
         });
 
         socket.on("connect", () => {
@@ -62,9 +72,30 @@ export default function MessagePage() {
                 if (!data.ai_loaded && !data.summary) {
                     setAiLoading(true);
                     fetchAnalysis(id)
-                        .then(aiData => setMail(prev => ({ ...prev, ...aiData })))
-                        .catch(err => console.error("AI analysis failed:", err))
-                        .finally(() => setAiLoading(false));
+                        .then(aiData => {
+                            setMail(prev => ({ ...prev, ...aiData }));
+                            if (aiData.ai_loaded) setAiLoading(false);
+                        })
+                        .catch(err => {
+                            console.error("AI analysis failed:", err);
+                            setAiLoading(false);
+                        });
+
+                    // Smart Fallback: If still loading after 5s, trigger a one-time re-fetch
+                    const timer = setTimeout(() => {
+                        setMail(prev => {
+                            if (!prev?.ai_loaded) {
+                                console.log("⏳ AI analysis taking longer... triggered smart fallback fetch.");
+                                fetchAnalysis(id).then(fallbackData => {
+                                    setMail(current => ({ ...current, ...fallbackData }));
+                                    if (fallbackData.ai_loaded) setAiLoading(false);
+                                });
+                            }
+                            return prev;
+                        });
+                    }, 5000);
+
+                    return () => clearTimeout(timer);
                 }
             })
             .catch(err => console.error("Failed to load message:", err));
@@ -167,7 +198,7 @@ export default function MessagePage() {
             <Navbar />
             <div className="blob-3"></div>
 
-            <div className="mx-auto max-w-6xl px-8 pt-28 pb-24 relative z-10">
+            <div className="mx-auto max-w-[1400px] px-8 pt-28 pb-24 relative z-10">
 
                 {/* Header row with back + delete */}
                 <div className="flex items-center justify-between mb-10">
@@ -217,10 +248,10 @@ export default function MessagePage() {
                     </div>
                 </div>
 
-                <div className="grid lg:grid-cols-3 gap-8 items-start">
+                <div className="grid lg:grid-cols-2 gap-8 items-start">
                     
                     {/* Main Content Column */}
-                    <div className="lg:col-span-2 space-y-8 animate-fade-up delay-100">
+                    <div className="space-y-8 animate-fade-up delay-100">
                         
                         {/* Summary Block */}
                         {(mail.summary || (aiLoading && !mail.summary)) && (
@@ -264,33 +295,59 @@ export default function MessagePage() {
                             </div>
                         )}
 
-                        {/* Exact Message Body */}
-                        <div className="glass !bg-white/90 p-6 sm:p-8 shadow-[0_4px_24px_rgba(0,0,0,0.02)]">
-                            {mail.body.includes('<') && mail.body.includes('>') ? (
-                                <iframe
-                                    title="Email Content"
-                                    srcDoc={mail.body}
-                                    className="w-full"
-                                    style={{ minHeight: '400px', height: 'auto', border: 'none' }}
-                                    sandbox="allow-same-origin"
-                                    onLoad={(e) => {
-                                        try {
-                                            const h = e.target.contentWindow.document.body.scrollHeight;
-                                            e.target.style.height = Math.max(h + 40, 400) + 'px';
-                                        } catch { e.target.style.height = '600px'; }
-                                    }}
-                                />
-                            ) : (
-                                <div className="text-[0.95rem] leading-relaxed text-gray-800 font-medium opacity-90 break-words">
-                                    {mail.body.split('\n\n').map((para, i) => (
-                                        <p key={i} className="mb-6 last:mb-0">
-                                            {para.split('\n').map((line, j) => (
-                                                <span key={j}>{renderLineWithLinks(line)}{j < para.split('\n').length - 1 && <br />}</span>
-                                            ))}
-                                        </p>
-                                    ))}
+                        {/* Exact Message Body - Redesigned as a Digital Document */}
+                        <div className="relative glass !bg-[#fdfcfb] p-8 sm:p-12 shadow-[0_10px_40px_rgba(0,0,0,0.04),0_0_0_1px_rgba(0,0,0,0.01)] transition-all duration-500">
+                            
+                            {/* Paper Stack Effect Decor */}
+                            <div className="absolute -bottom-1 -right-1 w-full h-full bg-white/40 rounded-[inherit] -z-10 border border-gray-100/50"></div>
+                            <div className="absolute -bottom-2 -right-2 w-full h-full bg-white/20 rounded-[inherit] -z-20 border border-gray-100/30"></div>
+
+                            {/* Utility Toolbar */}
+                            <div className="flex items-center justify-between mb-8 pb-6 border-b border-gray-100/80">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full bg-[#c2a3ff]"></div>
+                                    <span className="text-[0.6rem] font-bold uppercase tracking-[0.2em] text-gray-400">Original Transcript</span>
                                 </div>
-                            )}
+                                <div className="flex items-center gap-3">
+                                    <button 
+                                        onClick={handleCopyBody}
+                                        className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-gray-50 text-[0.65rem] font-bold uppercase tracking-widest text-gray-400 hover:text-[#ff9b5e] transition-all"
+                                    >
+                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                                        </svg>
+                                        {isCopied ? 'Copied' : 'Copy'}
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div className="max-w-[720px] mx-auto">
+                                {mail.body.includes('<') && mail.body.includes('>') ? (
+                                    <iframe
+                                        title="Email Content"
+                                        srcDoc={mail.body}
+                                        className="w-full"
+                                        style={{ minHeight: '400px', height: 'auto', border: 'none' }}
+                                        sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+                                        onLoad={(e) => {
+                                            try {
+                                                const h = e.target.contentWindow.document.body.scrollHeight;
+                                                e.target.style.height = Math.max(h + 40, 400) + 'px';
+                                            } catch { e.target.style.height = '600px'; }
+                                        }}
+                                    />
+                                ) : (
+                                    <div className="text-[1.05rem] leading-[1.8] text-slate-700 font-medium opacity-95 break-words" style={{ letterSpacing: '-0.01em' }}>
+                                        {mail.body.split('\n\n').map((para, i) => (
+                                            <p key={i} className="mb-8 last:mb-0">
+                                                {para.split('\n').map((line, j) => (
+                                                    <span key={j}>{renderLineWithLinks(line)}{j < para.split('\n').length - 1 && <br />}</span>
+                                                ))}
+                                            </p>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
                         {/* Attachments */}
@@ -301,9 +358,9 @@ export default function MessagePage() {
                                     {mail.attachments.map((att, i) => {
                                         const url = getAttUrl(att);
                                         const ext = att.filename.split('.').pop().toLowerCase();
-                                        const isImage = att.mimeType.startsWith('image/');
-                                        const isPdf = att.mimeType === 'application/pdf';
-                                        const isText = att.mimeType.startsWith('text/');
+                                        const isImage = att.mimeType.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext);
+                                        const isPdf = att.mimeType === 'application/pdf' || ext === 'pdf';
+                                        const isText = att.mimeType.startsWith('text/') || ['txt', 'md', 'csv'].includes(ext);
 
                                         return (
                                             <div key={i} className="rounded-2xl border border-gray-100 bg-white/60 overflow-hidden">

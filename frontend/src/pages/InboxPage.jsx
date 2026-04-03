@@ -219,10 +219,12 @@ export default function InboxPage({ folder = 'inbox' }) {
     // Real-time updates via SocketIO
     useEffect(() => {
         if (!userId) return;
+        const token = localStorage.getItem('odin_auth_token');
 
         const socket = io(WS_URL, {
             withCredentials: true,
-            transports: ["websocket"]
+            transports: ["websocket"],
+            auth: { token }
         });
 
         socket.on("connect", () => {

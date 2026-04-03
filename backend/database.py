@@ -69,8 +69,8 @@ def init_db() -> None:
     # Tokens collection - ensure unique user_id
     db.tokens.create_index([("user_id", ASCENDING)], unique=True)
     
-    # Create index on timestamp for temporal queries
-    db.emails.create_index([("timestamp", DESCENDING)])
+    # Attachments collection - ensure fast lookup and uniqueness
+    db.attachments.create_index([("attachment_id", ASCENDING)], unique=True)
     
     print(f"MongoDB initialized: {DB_NAME}")
 
@@ -92,30 +92,40 @@ def save_email_analysis(email_data: Dict) -> bool:
         if isinstance(summary, list):
             summary = "\n".join([str(s) for s in summary])
         
-        # Prepare the document
-        doc = {
-            "id": ensure_str(payload.get('id')),
-            "user_id": ensure_str(payload.get('user_id')),
-            "subject": ensure_str(payload.get('subject')),
-            "sender": ensure_str(payload.get('sender')),
-            "recipient": ensure_str(payload.get('to')),
-            "date": ensure_str(payload.get('date')),
-            "snippet": ensure_str(payload.get('snippet')),
-            "body": ensure_str(payload.get('body')),
-            "summary": summary,
-            "priority": ensure_str(payload.get('priority', "MEDIUM")),
-            "sentiment": ensure_str(payload.get('sentiment', "neutral")),
-            "sentiment_score": float(payload.get('sentiment_score', 0.5)),
-            "category": ensure_str(payload.get('category', "General")),
-            "extracted_info": payload.get('extracted_info', {}), # Nested JSON is native to Mongo
-            "processed_at": datetime.utcnow(),
-            "timestamp": email_date_to_timestamp(payload.get('date'))
+        # Prepare only the fields provided in the payload (Smart Merge)
+        update_data = {
+            "processed_at": datetime.utcnow()
         }
+        
+        # Mapping for core fields (payload key -> mongo key)
+        mapping = {
+            "id": "id", "user_id": "user_id", "subject": "subject",
+            "sender": "sender", "to": "recipient", "date": "date",
+            "snippet": "snippet", "body": "body", "summary": "summary",
+            "priority": "priority", "sentiment": "sentiment",
+            "sentiment_score": "sentiment_score", "category": "category",
+            "extracted_info": "extracted_info"
+        }
+        
+        for p_key, m_key in mapping.items():
+            val = payload.get(p_key)
+            if val is not None:
+                # Special handling for empty strings: only update if it's a valid non-empty value
+                # OR if it's the specific AI fields where we want to store the result
+                if val != "" or m_key in ["summary", "priority", "sentiment", "category", "extracted_info"]:
+                    # Ensure summary is stringified if it came as a list
+                    if m_key == "summary" and isinstance(val, list):
+                        val = "\n".join([str(s) for s in val])
+                    update_data[m_key] = val
+        
+        # Ensure timestamp is updated correctly if date is present
+        if "date" in update_data:
+            update_data["timestamp"] = email_date_to_timestamp(update_data["date"])
 
         # Upsert: Update if exists, insert if not
         db.emails.update_one(
-            {"id": doc["id"]},
-            {"$set": doc},
+            {"id": ensure_str(payload.get('id'))},
+            {"$set": update_data},
             upsert=True
         )
         return True
@@ -148,10 +158,16 @@ def save_emails_batch(email_list: List[Dict]) -> bool:
                 "timestamp": email_date_to_timestamp(payload.get('date'))
             }
             
-            # Using update_one with $set for basic info, but not touching labels/summaries if they exist
+            # Using update_one with $set for basic info
+            # CRITICAL: We only update the 'body' if the NEW one is not empty 
+            # OR if the existing one is already empty. This prevents 'Shallow Sync' poisoning.
+            update_fields = {k: v for k, v in doc.items() if k != 'body'}
+            if doc['body']:
+                update_fields['body'] = doc['body']
+
             operations.append(UpdateOne(
                 {"id": doc["id"]},
-                {"$set": doc},
+                {"$set": update_fields},
                 upsert=True
             ))
             
@@ -172,13 +188,59 @@ def get_emails_by_user(user_id: str, limit: int = 50) -> List[Dict]:
         for r in results:
             if '_id' in r: del r['_id']
             if 'processed_at' in r: r['processed_at'] = r['processed_at'].isoformat()
-            # Map back to 'from' for frontend compatibility if saved as 'sender'
+            # Map fields back for frontend compatibility
             if 'sender' in r: r['from'] = r['sender']
+            if 'recipient' in r: r['to'] = r['recipient']
             email_list.append(r)
         return email_list
     except Exception as e:
         print(f"Error fetching from MongoDB for user {user_id}: {e}")
         return []
+
+def delete_email_by_id(email_id: str, user_id: str) -> bool:
+    """Remove a specific email and its associated analysis from MongoDB."""
+    db = get_db()
+    try:
+        db.emails.delete_one({"id": email_id, "user_id": user_id})
+        # Note: We keep attachments for now to avoid orphan issues if shared, 
+        # but could cleanup here.
+        return True
+    except Exception as e:
+        print(f"Error deleting email {email_id}: {e}")
+        return False
+
+# ============ Attachment Blob Caching ============
+
+def save_attachment_blob(message_id: str, attachment_id: str, blob: bytes, mime_type: str, filename: str) -> bool:
+    """Store raw binary attachment data in MongoDB for near-instant retrieval."""
+    db = get_db()
+    try:
+        # We store as Binary to be efficient
+        db.attachments.update_one(
+            {"attachment_id": attachment_id},
+            {"$set": {
+                "message_id": message_id,
+                "attachment_id": attachment_id,
+                "blob": blob,
+                "mime_type": mime_type,
+                "filename": filename,
+                "cached_at": datetime.utcnow()
+            }},
+            upsert=True
+        )
+        return True
+    except Exception as e:
+        print(f"Error caching attachment {attachment_id}: {e}")
+        return False
+
+def get_attachment_blob(attachment_id: str) -> Optional[Dict]:
+    """Retrieve indexed attachment binary from MongoDB."""
+    db = get_db()
+    try:
+        return db.attachments.find_one({"attachment_id": attachment_id})
+    except Exception as e:
+        print(f"Error retrieving attachment {attachment_id}: {e}")
+        return None
 
 def get_analytics(user_id: str) -> Dict:
     """
@@ -281,7 +343,8 @@ def get_email_by_id(email_id: str, user_id: Optional[str] = None) -> Optional[Di
         res = db.emails.find_one(query)
         if res:
             if '_id' in res: del res['_id']
-            # Map 'recipient' back to 'to' for frontend compatibility if needed
+            # Map back to 'from' for frontend compatibility
+            if 'sender' in res: res['from'] = res['sender']
             if 'recipient' in res: res['to'] = res['recipient']
             if 'processed_at' in res: res['processed_at'] = res['processed_at'].isoformat()
             return res

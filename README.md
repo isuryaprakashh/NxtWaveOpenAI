@@ -1,105 +1,120 @@
-# 🔱 Odin Mail — AI Email Assistant
+# 🔱 Odin Mail — AI Email Assistant (Technical Documentation)
 
-**Odin Mail** is a premium, high-performance AI email management platform that turns your cluttered inbox into a strategic asset. Built with **React** and **Flask**, it leverages **Google Gemini 2.0 Flash** (with **Groq LLaMA 3.3 70B fallback**) to provide instant summaries, priority assessment, and a RAG-powered chat interface to talk directly to your data.
-
----
-
-## ✨ Key Features
-
-### 🧠 Intelligent Inbox
-- **AI Summarization**: Get the "gist" of long threads in a single sentence.
-- **Priority Detection**: Automated **HIGH / MEDIUM / LOW** labeling based on content and urgency.
-- **Sentiment & Category**: Instant detection of sender mood and category (Work, Support, Personal, etc.).
-- **Smart Replies**: One-tap AI-suggested responses tailored to the email context.
-
-### 💬 RAG Chat (Chat with Inbox)
-- Ask natural language questions like *"What were the action items from John's last email?"* or *"Summarize my recent invoices."*
-- Uses **Retrieve-Augmented Generation** to search your MongoDB cache for instant, accurate answers.
-
-### 📊 Professional Analytics
-- Visual distribution of your inbox by priority and sentiment.
-- Category breakdown to see where your time is going.
-
-### 🔒 Enterprise-Grade Stability
-- **Token-Based Authentication**: Custom auth system designed specifically for cross-domain stability (Vercel + Render).
-- **Socket.io Integration**: Real-time notifications for new emails.
-- **Encryption**: sensitive GMAIL OAuth tokens are encrypted at rest using AES (Fernet).
+**Odin Mail** is a high-performance, intelligence-first email management platform. It creates a secondary "Source of Truth" in MongoDB to provide instant responsiveness, while leveraging world-class LLMs (Groq & Gemini) to analyze, prioritize, and interact with your correspondence.
 
 ---
 
-## 🏗️ Project Architecture
+## 🗺️ How it Works (System Workflow)
 
-```text
-ODIN-MAIL/
-├── backend/                # Flask Python Server
-│   ├── app.py              # Main API & WebSocket logic
-│   ├── database.py         # MongoDB Operations (Encrypted)
-│   ├── config.py           # Environment-aware configuration
-│   └── openai_helpers.py   # AI Core (Gemini + Groq)
-├── frontend/               # React + Vite Client
-│   ├── src/
-│   │   ├── services/api.js # Auth-Token-Aware API layer
-│   │   ├── config.js       # Centralized service discovery
-│   │   └── pages/          # Inbox, Chat, Analytics, Message
-└── README.md               # You are here
+```mermaid
+graph LR
+    User((User)) <--> FE[React Frontend]
+    FE <--> BE[Flask Backend]
+    
+    subgraph "Intelligent Processing"
+        BE --> P[Recursive MIME Parser]
+        P --> DB[(MongoDB Cache)]
+        BE <--> AI{AI Intelligence}
+        AI --> Groq[Groq LLaMA 3.3]
+        AI --> Gem[Gemini 2.0]
+    end
+    
+    subgraph "External Integration"
+        BE <--> Gmail[(Gmail API)]
+        Gmail -.->|OAuth2| User
+    end
+
+    Note over DB: Standardized Data<br/>Encrypted Tokens<br/>Text-Search Indexed
 ```
 
 ---
 
-## 🚀 Quick Start
+## 🧠 AI Intelligence Layer (Groq & Gemini)
 
-### 1. Backend Setup (Flask)
-```bash
-cd backend
-pip install -r requirements.txt
-python app.py
-```
+### Intelligence Analysis Loop
+The AI performs a comprehensive analysis of every incoming email using the following parameters:
+- **Priority Labeling**: High (Action Required), Medium (Information), Low (CC'd/General).
+- **Sentiment Scoring**: A 0.0 to 1.0 score mapping to Positive, Neutral, or Negative.
+- **Categorization**: Auto-tagging into Work, Social, Promotions, Finance, or Personal.
+- **Action Extraction**: Identifying specific dates, tasks, and follow-ups.
 
-### 2. Frontend Setup (React)
-```bash
-cd frontend
-npm install
-npm run dev
-```
+### LLM Prompting Strategy
+We use **JSON-strict prompting** with an auto-fallback repair mechanism. If the primary model (Groq) fails or rate-limits, the system automatically redirects to **Gemini 2.0 Flash**.
 
-### 3. Environment Variables (.env)
-Create a `.env` in the `backend/` folder:
+---
+
+## 🗄️ Database Schema & Persistence
+
+### Collections Overview
+
+#### `emails`
+The core repository for all synchronized messages.
+- **Indexes**: 
+  - `id` (Unique, Ascending): Maps to Gmail Message ID.
+  - `user_id` (Filtered): Fast retrieval of users' private data.
+  - `email_text_search` (Text): Multi-field index (subject, sender, body) for instant search.
+
+#### `tokens` (Encrypted)
+Stores OAuth2 credentials.
+- **Security**: Blobs are encrypted via **AES-256 Fernet** using a 32-byte key generated at system initialization.
+
+#### `sessions`
+Used for cross-domain stability.
+- **Token-Auth**: Provides a `X-Odin-Token` mechanism to bypass unreliable browser cookie policies in SaaS environments.
+
+---
+
+## 📡 API Reference
+
+| Endpoint | Method | Description |
+| :--- | :--- | :--- |
+| `/api/inbox` | GET | Returns 50 most recent emails. Uses Smart-Cache threshold (15+). |
+| `/api/message/<id>` | GET | Returns full message detail. Features Shallow-Cache detection. |
+| `/api/message/<id>/analyze` | POST | Forces a fresh AI analysis of the email content. |
+| `/api/message/<id>/reply` | POST | Generates a context-aware AI reply draft based on Tone. |
+| `/api/chat` | POST | RAG-powered chatbot that answers questions based on your Inbox data. |
+| `/api/analytics` | GET | Returns aggregation data (Priority distribution/Sentiment over time). |
+
+---
+
+## 🛠️ Specialized Engineering Highlights
+
+### 1. The Recursive MIME Parser
+Standard Gmail parsers often fail on complex HTML structures (like Google Security Alerts or Invoices). Odin Mail uses a recursive tree-walking algorithm that searches through all `multipart/alternative` and `multipart/mixed` containers to find the highest-quality text content.
+
+### 2. Shallow Cache Repair 
+To ensure instant inbox loading, we sometimes sync "thin" metadata. When a user opens a specific message, the system performs a sanity-check on the body length. If `< 5 characters`, it triggers a silent "background repair" from the Gmail API to fill the missing content.
+
+### 3. Socket.IO Real-Time Sync
+Background synthesis results are pushed to the frontend via WebSockets.
+- **Room Logic**: Users join a private room named after their `user_id` to ensure secure, isolated notification delivery.
+
+---
+
+## 🔧 Environment Configuration (.env)
+
 ```env
-# AI Keys
-GEMINI_API_KEY=your_key
-GROQ_API_KEY=your_key_fallback
+# Primary LLM Configuration
+GROQ_API_KEY=gsk_...           # Primary: Extreme speed
+GEMINI_API_KEY=AIza...         # Fallback: High context window
 
-# Database (MongoDB)
-MONGO_URI=your_mongodb_atlas_uri
+# Core Persistence
+MONGO_URI=mongodb+srv://...     # MongoDB Atlas Connection
+MONGO_DB_NAME=odin_email_db     # Database Identifier
 
-# Google OAuth
-GOOGLE_CLIENT_ID=your_id
-GOOGLE_CLIENT_SECRET=your_secret
+# OAuth 2.0 Credentials
+GOOGLE_CLIENT_ID=...           # Google Cloud Console Client ID
+GOOGLE_CLIENT_SECRET=...       # Google Cloud Console Secret
 
-# Security
-ENCRYPTION_KEY=generate_with_fernet
-FLASK_SECRET_KEY=your_system_secret
+# Internal Security
+ENCRYPTION_KEY=...             # 32-byte Fernet Key (base64)
+FLASK_SECRET_KEY=...           # Flask Session signing
 ```
 
 ---
 
-## 🔧 Technical Stack
-
-| Category | Technology |
-| :--- | :--- |
-| **Frontend** | React 18, Tailwind CSS, Vite |
-| **Backend** | Python 3.12, Flask, Flask-SocketIO |
-| **AI Models** | Google Gemini 2.0 Flash, LLaMA 3.3 70B (Groq) |
-| **Database** | MongoDB (NoSQL) |
-| **Real-time** | Socket.IO |
-| **Authentication** | Google OAuth 2.0 + Custom Token Persistence |
+## 🏁 Quality & Verification
+All modules are verified against `test_ai.py` (API connectivity) and `health_check` (Port stability). The backend is optimized for Windows performance using a threaded execution model.
 
 ---
-
-## 🐛 Build & Deployment
-
-- **Frontend**: Professionally deployed on **Vercel**.
-- **Backend**: Scalable containerized service on **Render**.
-- **Database**: **MongoDB Atlas** for managed high-availability data storage.
-
----
+© 2026 Odin Mail — Technical Documentation

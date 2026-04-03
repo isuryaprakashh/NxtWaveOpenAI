@@ -34,13 +34,13 @@ if not GEMINI_API_KEY:
 else:
     genai.configure(api_key=GEMINI_API_KEY)
 
-# Use Gemini 2.5 Flash - fast and efficient for email analysis
-MODEL_NAME = "gemini-2.5-flash"
+# Use Gemini 1.5 Flash - fast and efficient fallback
+MODEL_NAME = "gemini-1.5-flash"
 
 # ============ Groq Fallback Configuration ============
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL = "compound-beta-mini"  # Compact compound model on Groq
+GROQ_MODEL = "llama-3.3-70b-versatile"  # Latest high-speed model on Groq
 
 if not GROQ_API_KEY:
     print("WARNING: GROQ_API_KEY not set. Fallback AI will not be available.")
@@ -253,16 +253,17 @@ def call_gemini(prompt: str, json_mode: bool = False) -> Optional[str]:
     Returns:
         The model's response text, or None if both APIs failed
     """
-    # Try Gemini first
-    result = _call_gemini_internal(prompt, json_mode)
+    # Try Groq first as requested
+    print("AI Call: Trying Groq first...")
+    result = call_groq(prompt, json_mode)
     if result:
         return result
     
-    # Fallback to Groq
-    print("Gemini failed, falling back to Groq...")
-    result = call_groq(prompt, json_mode)
+    # Fallback to Gemini
+    print("Groq failed or unavailable, falling back to Gemini...")
+    result = _call_gemini_internal(prompt, json_mode)
     if result:
-        print("Groq fallback successful")
+        print("Gemini fallback successful")
         return result
     
     print("Both Gemini and Groq failed")
@@ -387,9 +388,9 @@ def extract_information(text: str) -> Dict:
     return analyze_email_comprehensive(text).get("extracted_info", {})
 
 
-def ask_gemini_with_context(question: str, context: str) -> str:
+def ask_ai_about_emails(question: str, context: str) -> str:
     """
-    Ask Gemini a question based on provided email context.
+    Ask the AI a question based on provided email context.
     
     Args:
         question: The user's question
